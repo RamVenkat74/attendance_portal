@@ -41,8 +41,7 @@ app.use((req, res, next) => {
 
 	console.log(
 		colorize(
-			`Request Method: ${method}, Request Path: ${
-				req.path
+			`Request Method: ${method}, Request Path: ${req.path
 			}, Request Time: ${currentDateTime}, Request IP: ${req.get('host')}`
 		)
 	);
