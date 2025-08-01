@@ -15,26 +15,29 @@ import {
 } from 'antd';
 import { FileExcelOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { url as backendUrl } from '../Backendurl'; // Corrected Import
+import { url as backendUrl } from '../Backendurl';
 
 const { RangePicker } = DatePicker;
 
+// --- Helper Function to Generate Dynamic Columns ---
 const generateColumns = (reportData) => {
-    if (!reportData || reportData.length === 0) {
+    if (!reportData || reportData.length === 0 || !reportData[0].courses) {
         return [
             { title: 'Reg. No', dataIndex: 'RegNo', key: 'RegNo', fixed: 'left', width: 150 },
             { title: 'Name', dataIndex: 'name', key: 'name', fixed: 'left', width: 200 },
         ];
     }
+
     const columns = [
         { title: 'Reg. No', dataIndex: 'RegNo', key: 'RegNo', fixed: 'left', width: 150 },
         { title: 'Name', dataIndex: 'name', key: 'name', fixed: 'left', width: 200 },
     ];
+
     const dailyStatuses = reportData[0].courses[0].statuses || [];
     dailyStatuses.forEach((status, index) => {
         const columnTitle = `${dayjs(status.date).format('DD-MMM-YY')} (H${status.hour})`;
         columns.push({
-            title: <span className={!status.valid ? 'text-red-500' : ''}>{columnTitle}</span>,
+            title: <span>{columnTitle}</span>,
             key: `status-${index}`,
             width: 120,
             align: 'center',
@@ -46,6 +49,7 @@ const generateColumns = (reportData) => {
             },
         });
     });
+
     columns.push(
         { title: 'Total Hours', dataIndex: ['courses', 0, 'totalHours'], key: 'total', width: 120, align: 'center' },
         { title: 'Present', dataIndex: ['courses', 0, 'present'], key: 'present', width: 120, align: 'center' },
@@ -63,9 +67,11 @@ const generateColumns = (reportData) => {
             },
         }
     );
+
     return columns;
 };
 
+// --- Main Component ---
 const Students = () => {
     const [form] = Form.useForm();
     const [courses, setCourses] = useState([]);
@@ -104,13 +110,12 @@ const Students = () => {
 
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`${backendUrl}/attendance/student-dashboard`, {
+            // --- FIX: Using the new, correct class report endpoint ---
+            const response = await fetch(`${backendUrl}/attendance/reports/class`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({
                     coursecode: selectedCourse.coursecode,
-                    yr: selectedCourse.dept,
-                    Class: selectedCourse.class,
                     startDate: startDate.format('YYYY-MM-DD'),
                     endDate: endDate.format('YYYY-MM-DD'),
                 }),
@@ -134,8 +139,8 @@ const Students = () => {
 
     const filteredData = reportData.filter(
         student =>
-            student.name.toLowerCase().includes(searchText.toLowerCase()) ||
-            student.RegNo.toLowerCase().includes(searchText.toLowerCase())
+            (student.name && student.name.toLowerCase().includes(searchText.toLowerCase())) ||
+            (student.RegNo && student.RegNo.toLowerCase().includes(searchText.toLowerCase()))
     );
 
     const columns = generateColumns(reportData);
@@ -143,6 +148,7 @@ const Students = () => {
     return (
         <div className="p-6 bg-gray-50 min-h-screen">
             <h1 className="text-2xl font-bold mb-6 text-gray-800">Class Attendance Report</h1>
+
             <Card className="shadow-md mb-6">
                 <Form form={form} layout="vertical" onFinish={handleGenerateReport}>
                     <Row gutter={24} align="bottom">
@@ -173,6 +179,7 @@ const Students = () => {
                     </Row>
                 </Form>
             </Card>
+
             <Card className="shadow-md">
                 <Row justify="space-between" align="middle" className="mb-4">
                     <Col>
@@ -194,6 +201,7 @@ const Students = () => {
                         )}
                     </Col>
                 </Row>
+
                 {isReportLoading ? (
                     <div className="text-center p-10"><Spin size="large" /></div>
                 ) : reportData.length > 0 ? (

@@ -26,8 +26,6 @@ const UnlockAttendance = () => {
 	const [isCoursesLoading, setIsCoursesLoading] = useState(true);
 	const [isRecordsLoading, setIsRecordsLoading] = useState(false);
 
-	// --- Data Fetching ---
-
 	const fetchCourses = async () => {
 		setIsCoursesLoading(true);
 		try {
@@ -60,7 +58,6 @@ const UnlockAttendance = () => {
 		setIsRecordsLoading(true);
 		try {
 			const token = localStorage.getItem('token');
-			// This endpoint needs to be created on the backend
 			const response = await fetch(`${backendUrl}/attendance/records/${courseId}`, {
 				headers: { Authorization: `Bearer ${token}` },
 			});
@@ -80,13 +77,39 @@ const UnlockAttendance = () => {
 	// --- API Operations ---
 
 	const handleUnlock = async (recordId) => {
-		// This functionality needs a dedicated backend endpoint
-		message.info('Unlock functionality to be implemented.');
+		try {
+			const token = localStorage.getItem('token');
+			const response = await fetch(`${backendUrl}/attendance/records/${recordId}/unlock`, {
+				method: 'PATCH',
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.message);
+			}
+			message.success('Attendance record unlocked successfully.');
+			handleCourseChange(selectedCourse._id); // Refresh the list
+		} catch (error) {
+			message.error(error.message);
+		}
 	};
 
 	const handleDelete = async (recordId) => {
-		// This functionality needs a dedicated backend endpoint
-		message.info('Delete functionality to be implemented.');
+		try {
+			const token = localStorage.getItem('token');
+			const response = await fetch(`${backendUrl}/attendance/records/${recordId}`, {
+				method: 'DELETE',
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.message);
+			}
+			message.success('Attendance record deleted successfully.');
+			handleCourseChange(selectedCourse._id); // Refresh the list
+		} catch (error) {
+			message.error(error.message);
+		}
 	};
 
 	return (

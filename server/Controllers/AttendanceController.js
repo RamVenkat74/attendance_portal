@@ -165,40 +165,60 @@ const unmarkedAttendanceHours = asyncHandler(async (req, res) => {
 	res.status(200).json(results);
 });
 
-const deleteRecord = asyncHandler(async (req, res) => {
-	const { date, hr, coursecode } = req.body;
-	const course = await Course.findOne({ coursecode });
-	if (!course) {
-		res.status(404);
-		throw new Error('Course not found');
-	}
-	const result = await Report.deleteOne({ course: course._id, date, hr });
-	if (result.deletedCount === 0) {
-		res.status(404);
-		throw new Error('Attendance record not found.');
-	}
-	res.status(200).json({ message: 'Attendance record deleted successfully.' });
-});
-
-/**
- * @desc    Get all attendance records for a specific course
- * @route   GET /api/attendance/records/:courseId
- * @access  Private
- */
 const getRecordsByCourse = asyncHandler(async (req, res) => {
-	const course = await Course.findById(req.params.courseId);
-	if (!course) {
-		res.status(404);
-		throw new Error('Course not found');
-	}
-
-	if (!course.faculty.includes(req.user.id)) {
-		res.status(403);
-		throw new Error('You are not authorized to view records for this course.');
-	}
-
 	const records = await Report.find({ course: req.params.courseId }).sort({ date: -1 });
 	res.status(200).json(records);
+});
+
+const unlockRecord = asyncHandler(async (req, res) => {
+	const report = await Report.findById(req.params.id);
+	if (!report) {
+		res.status(404);
+		throw new Error('Attendance record not found');
+	}
+	report.freeze = false;
+	report.isExpired = false;
+	await report.save();
+	res.status(200).json(report);
+});
+
+const deleteRecordById = asyncHandler(async (req, res) => {
+	const report = await Report.findById(req.params.id);
+	if (!report) {
+		res.status(404);
+		throw new Error('Attendance record not found');
+	}
+	await Report.deleteOne({ _id: req.params.id });
+	res.status(200).json({ message: 'Attendance record deleted successfully' });
+});
+
+const getClassReport = asyncHandler(async (req, res) => {
+	const { coursecode, startDate, endDate } = req.body;
+	const course = await Course.findOne({ coursecode }).populate('students');
+	if (!course || course.students.length === 0) {
+		res.status(404);
+		throw new Error('Course not found or no students enrolled.');
+	}
+	const studentIds = course.students.map(s => s._id);
+	const result = await Report.aggregate([
+		{ $match: { course: course._id, date: { $gte: new Date(startDate), $lte: new Date(endDate) }, freeze: true } },
+		{ $sort: { date: 1, hr: 1 } },
+		{ $unwind: '$attendance' },
+		{ $group: { _id: '$attendance.student', present: { $sum: { $cond: [{ $in: ['$attendance.status', [1, 2]] }, 1, 0] } }, totalHours: { $sum: 1 }, statuses: { $push: { date: '$date', hour: '$hr', status: '$attendance.status' } } } },
+		{ $group: { _id: null, allStudents: { $push: '$$ROOT' } } },
+		{ $project: { _id: 0, data: { $map: { input: studentIds, as: 'studentId', in: { $let: { vars: { studentData: { $arrayElemAt: [{ $filter: { input: '$allStudents', as: 's', cond: { $eq: ['$$s._id', '$$studentId'] } } }, 0] } }, in: { student: '$$studentId', present: { $ifNull: ['$$studentData.present', 0] }, totalHours: { $ifNull: ['$$studentData.totalHours', 0] }, statuses: { $ifNull: ['$$studentData.statuses', []] } } } } } } } },
+		{ $unwind: '$data' },
+		{ $replaceRoot: { newRoot: '$data' } },
+		{ $lookup: { from: 'students', localField: 'student', foreignField: '_id', as: 'studentDetails' } },
+		{ $unwind: '$studentDetails' },
+		{ $project: { _id: 0, RegNo: '$studentDetails.RegNo', name: '$studentDetails.StdName', courses: [{ present: '$present', totalHours: '$totalHours', statuses: '$statuses' }] } },
+		{ $sort: { RegNo: 1 } }
+	]);
+	if (result.length === 0) {
+		const studentList = course.students.map(s => ({ RegNo: s.RegNo, name: s.StdName, courses: [{ present: 0, totalHours: 0, statuses: [] }] }));
+		return res.status(200).json(studentList);
+	}
+	res.status(200).json(result);
 });
 
 module.exports = {
@@ -206,6 +226,8 @@ module.exports = {
 	fetchData,
 	studentDashboard,
 	unmarkedAttendanceHours,
-	deleteRecord,
 	getRecordsByCourse,
+	unlockRecord,
+	deleteRecordById,
+	getClassReport, // This is now correctly exported
 };

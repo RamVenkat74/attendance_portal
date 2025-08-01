@@ -14,7 +14,7 @@ import {
 	Empty,
 } from 'antd';
 import { SaveOutlined, CalendarOutlined } from '@ant-design/icons';
-import { url as backendUrl } from '../Backendurl'; // Corrected Import
+import { url as backendUrl } from '../Backendurl';
 
 const TimeTableVerify = () => {
 	const [form] = Form.useForm();
