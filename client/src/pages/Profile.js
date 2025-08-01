@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext, useCallback } from 'react';
 import {
 	Card,
 	Row,
@@ -9,342 +9,163 @@ import {
 	Divider,
 	Button,
 	message,
-	Modal,
-	Collapse
-} from "antd";
-import { useNavigate } from "react-router-dom";
-import { url } from "../Backendurl";
+	Collapse,
+	Avatar,
+	Statistic,
+	Popconfirm,
+	Empty
+} from 'antd';
+import { useNavigate } from 'react-router-dom';
+import { UserOutlined, TeamOutlined, HourglassOutlined, DeleteOutlined } from '@ant-design/icons';
+// --- FIX: Corrected the import path to match your lowercase filename ---
+import { AuthContext } from '../context/authContext';
+import { url as backendUrl } from '../Backendurl';
 
 const { Title, Text } = Typography;
+const { Panel } = Collapse;
 
-const Logo = ({ username }) => {
-	if (!username) return null;
-	const initial = username.charAt(0).toUpperCase();
-	const backgroundColor_custom = `#${Math.floor(
-		Math.random() * 16777215
-	).toString(16)}`;
-
-	return (
-		<div
-			className="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold mb-5"
-			style={{ backgroundColor: backgroundColor_custom }}
-		>
-			{initial}
-		</div>
-	);
-};
-
-const Profile = ({ setAuth }) => {
-	const [profile, setProfile] = useState(null);
-	const [loading, setLoading] = useState(true);
-	const [modal, setModal] = useState(false);
-	const [pendingHours, setPendingHours] = useState({});
-	const [pendingDetails, setPendingDetails] = useState({});
-	const [cc, setCC] = useState("");
+const Profile = () => {
+	const { user, logout } = useContext(AuthContext);
+	const [dashboardData, setDashboardData] = useState([]);
+	const [isLoading, setIsLoading] = useState(true);
 	const navigate = useNavigate();
-	const backgroundColor_custom = `#${Math.floor(
-		Math.random() * 16777215
-	).toString(16)}`;
-	useEffect(() => {
-		fetchProfile();
-	}, []);
 
-	const fetchProfile = async () => {
+	const fetchDashboardData = useCallback(async () => {
+		setIsLoading(true);
 		try {
-			const response = await fetch(`${url}/students/profile`, {
-				headers: {
-					Authorization: `Bearer ${localStorage.getItem("token")}`,
-				},
+			const token = localStorage.getItem('token');
+			const response = await fetch(`${backendUrl}/faculty/dashboard`, {
+				headers: { Authorization: `Bearer ${token}` },
 			});
 
-			if (response.status === 403) {
-				message.error("Invalid token. Redirecting to login...");
-				localStorage.removeItem("token");
-				localStorage.removeItem("user");
-				setAuth(false);
-				navigate("/auth");
-				return;
+			if (!response.ok) {
+				if (response.status === 401) {
+					message.error('Your session has expired. Please log in again.');
+					logout();
+					navigate('/auth');
+				}
+				throw new Error('Failed to fetch dashboard data.');
 			}
-
 			const data = await response.json();
-			setProfile(data);
-			await fetchPendingHours(data.user);
-			setLoading(false);
-			document.title = data?.fac?.username || "ATTENDANCE SYSTEM | PROFILE";
+			setDashboardData(data);
 		} catch (error) {
-			console.error("Error fetching profile data:", error);
-			message.error("Failed to fetch profile data.");
-			setLoading(false);
-			document.title = "ATTENDANCE SYSTEM | PROFILE";
+			message.error(error.message);
+		} finally {
+			setIsLoading(false);
 		}
-	};
+	}, [logout, navigate]);
 
-	const fetchPendingHours = async (courses) => {
-        const coursePendingHours = {};
-		const coursependingDetails = {};
-        for (let course of courses) {
-            try {
-                const response = await fetch(`${url}/attendance/pending-hours`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${localStorage.getItem("token")}`,
-                    },
-                    body: JSON.stringify({ courses: [course.coursecode] }), 
-                });
+	useEffect(() => {
+		if (user) {
+			fetchDashboardData();
+			document.title = `${user?.username || 'Faculty'} | Profile`;
+		}
+	}, [user, fetchDashboardData]);
 
-                if (response.ok) {
-                    const data = await response.json();
-                    coursePendingHours[course.coursecode] = data[0].unmarkedHours; 
-					coursependingDetails[course.coursecode] = data[0].pendingHours;
-                } else {
-                    message.error(`Failed to fetch pending hours for ${course.coursecode}`);
-                }
-            } catch (error) {
-                console.error("Error fetching pending hours:", error);
-            }
-        }
 
-        setPendingHours(coursePendingHours);
-		setPendingDetails(coursependingDetails);
-		console.log('pending details:', coursependingDetails, pendingHours);
-    };
-
-	const handleRemoveRep = async (rep, coursecode) => {
+	const handleRemoveCourse = async (courseId) => {
 		try {
-			const response = await fetch(`${url}/admin/remove-rep`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${localStorage.getItem("token")}`,
-				},
-				body: JSON.stringify({
-					_id: rep._id,
-					username: rep.username,
-					coursecode: coursecode,
-				}),
+			const token = localStorage.getItem('token');
+			const response = await fetch(`${backendUrl}/faculty/courses/${courseId}`, {
+				method: 'DELETE',
+				headers: { Authorization: `Bearer ${token}` },
 			});
-
-			const result = await response.json();
-
-			if (response.status === 401) {
-				message.error("Invalid token. Redirecting to login...");
-				navigate("/auth");
-				return;
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.message);
 			}
-
-			if (response.ok) {
-				message.success("Representative removed successfully!");
-				setProfile((prevProfile) => {
-					const updatedReps = prevProfile.reps.map((repsList, index) =>
-						index === coursecode
-							? repsList.filter((r) => r._id !== rep._id)
-							: repsList
-					);
-					return { ...prevProfile, reps: updatedReps };
-				});
-			} else {
-				message.error(result.message || "Failed to remove representative");
-			}
+			message.success('Course and all associated data deleted successfully.');
+			fetchDashboardData();
 		} catch (error) {
-			console.error("Error removing representative:", error);
-			message.error("Failed to remove representative");
+			message.error(error.message);
 		}
 	};
 
-	const handleRemoveCourse = async () => {
-		if (cc === "") {
-			message.error("Course code cannot be empty");
-			return;
-		}
-		try {
-			const res = await fetch(`${url}/students/delete-course`, {
-				method: "DELETE",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${localStorage.getItem("token")}`,
-				},
-				body: JSON.stringify({ coursecode: cc }),
-			});
-
-			if (res.status === 401) {
-				message.error("Invalid token. Redirecting to login...");
-				navigate("/auth");
-				return;
-			}
-
-			if (res.status === 200) {
-				message.success(`${cc} course is successfully deleted`);
-				fetchProfile();
-				setModal(false);
-			} else {
-				message.error("Failed to delete the course");
-			}
-		} catch (err) {
-			console.log(err);
-			message.error("Failed to delete the course");
-		}
+	const handleRemoveRep = async (repId, courseId) => {
+		message.info('Remove representative functionality to be implemented.');
 	};
 
-	if (loading) {
-		return <Spin size="large" className="block mx-auto mt-20" />;
+
+	if (isLoading) {
+		return <div className="text-center mt-20"><Spin size="large" /></div>;
 	}
 
-	const { fac = {}, user = [], hrs = [], reps = [] } = profile || {};
-
 	return (
-		<div>
-			<Title level={2} className="text-center text-blue-500">
-				Faculty Profile
-			</Title>
+		<div className="p-6 bg-gray-50 min-h-screen">
+			<Card className="shadow-md mb-8">
+				<Row align="middle" gutter={24}>
+					<Col>
+						<Avatar size={80} icon={<UserOutlined />} className="bg-blue-500">
+							{user?.username?.[0]?.toUpperCase()}
+						</Avatar>
+					</Col>
+					<Col>
+						<Title level={2} className="mb-0">{user?.username}</Title>
+						<Text type="secondary">Faculty Dashboard</Text>
+					</Col>
+				</Row>
+			</Card>
 
-			<Row gutter={[16, 16]} className="mb-8">
-				<Col span={24} className="text-left">
-					<div className="flex flex-row justify-center items-center">
-						<Logo username={fac.username} />
-					</div>
-					<h3
-						className="mb-5 font-semibold md:text-xl text-lg"
-						style={{ color: backgroundColor_custom }}
-					>
-						Faculty Details
-					</h3>
-					<Card bordered={false} className="bg-white shadow-md">
-						<List size="medium">
-							<List.Item>
-								<Text strong>Username:</Text>{" "}
-								<Text className="font-semibold ">{fac.username}</Text>
-							</List.Item>
-							<List.Item>
-								<Text strong>Role:</Text> <Text>{fac.role}</Text>
-							</List.Item>
-							<List.Item>
-								<Text strong>Faculty ID:</Text> <Text>{fac._id}</Text>
-							</List.Item>
-						</List>
-					</Card>
-				</Col>
-			</Row>
+			<Title level={3} className="mb-6">My Courses</Title>
 
-			<Divider />
-
-			<h3
-				className="mb-5 font-semibold md:text-xl text-lg"
-				style={{ color: backgroundColor_custom }}
-			>
-				Courses and Students
-			</h3>
-			{user.map((course, index) => (
-				<Card
-					key={course._id}
-					title={
-						<div className="flex justify-between items-center">
-							<span>
-								Course: {course.coursename} ({course.coursecode})
-							</span>
-							<Button
-								type="primary"
-								danger
-								onClick={() => {
-									setModal(true);
-									setCC(course.coursecode);
-								}}
-							>
-								Remove Course
-							</Button>
-						</div>
-					}
-					bordered={false}
-					className="mb-5 bg-white shadow-md"
-				>
-					<List size="medium">
-						<List.Item>
-							<Text strong>Class:</Text> <Text>{course.class}</Text>
-						</List.Item>
-						<List.Item>
-							<Text strong>Year:</Text> <Text>{course.dept}</Text>
-						</List.Item>
-						<List.Item>
-                            <Text strong>Pending Hours to mark the attendance:</Text>{" "}
-                            <Text>{
-								pendingHours[course.coursecode] !== undefined
-									? pendingHours[course.coursecode]
-									: 'Loading...'
+			{dashboardData.length > 0 ? (
+				<Row gutter={[24, 24]}>
+					{dashboardData.map((course) => (
+						<Col xs={24} md={12} lg={8} key={course._id}>
+							<Card
+								title={`${course.coursename} (${course.coursecode})`}
+								className="shadow-lg h-full"
+								extra={
+									<Popconfirm
+										title="Delete Course"
+										description="Are you sure? This will delete the course and all its attendance records permanently."
+										onConfirm={() => handleRemoveCourse(course._id)}
+										okText="Yes, Delete"
+										cancelText="No"
+										okButtonProps={{ danger: true }}
+									>
+										<Button danger type="text" icon={<DeleteOutlined />} />
+									</Popconfirm>
 								}
-							</Text> 
-                        </List.Item>
-						{pendingHours[course.coursecode] > 0 && <Collapse className="mb-4">
-							<Collapse.Panel header="Pending Hours Details" key="1">
-								
-								{pendingDetails[course.coursecode].length > 0 &&  pendingDetails[course.coursecode].map((hr, index) => (
-									<p>{`${hr.date} : ${hr.hour} hour`}</p>
-							))}
-						
-							</Collapse.Panel>
-						</Collapse>}
-						<List.Item>
-							<Text strong>Representative(s):</Text>{" "}
-							{reps[index]?.map((rep) => (
-								<Card
-									key={rep._id}
-									title={`Representative: ${rep.username}`}
-									bordered={false}
-									className="mb-5 bg-white shadow-md"
-								>
-									<List size="small">
-										<List.Item>
-											<Text strong>Username:</Text> <Text>{rep.username}</Text>
-										</List.Item>
-										<List.Item>
-											<Text strong>Role:</Text> <Text>{rep.role}</Text>
-										</List.Item>
-										<List.Item>
-											<Text strong>Representative password:</Text>{" "}
-											<Text>{rep.password}</Text>
-										</List.Item>
-										<List.Item>
-											<Button
-												type="primary"
-												danger
-												onClick={() => handleRemoveRep(rep, course.coursecode)}
-											>
-												Remove Representative
-											</Button>
-										</List.Item>
-									</List>
-								</Card>
-							))}
-						</List.Item>
-						<List.Item>
-							<Text strong>Total Hours Taken:</Text> <Text>{hrs[index]}</Text>
-						</List.Item>
-						<List.Item>
-							<Text strong>Number of Students Enrolled:</Text>{" "}
-							<Text>{course.students.length}</Text>
-						</List.Item>
-					</List>
+							>
+								<Row gutter={16}>
+									<Col span={12}>
+										<Statistic title="Students" value={course.studentCount} prefix={<TeamOutlined />} />
+									</Col>
+									<Col span={12}>
+										<Statistic title="Hours Taught" value={course.hoursTaught} prefix={<HourglassOutlined />} />
+									</Col>
+								</Row>
+								<Divider />
+								<Collapse ghost>
+									<Panel header={`Representatives (${course.representatives.length})`} key="1">
+										{course.representatives.length > 0 ? (
+											<List
+												dataSource={course.representatives}
+												renderItem={(rep) => (
+													<List.Item
+														actions={[
+															<Button type="link" danger onClick={() => handleRemoveRep(rep._id, course._id)}>
+																Remove
+															</Button>
+														]}
+													>
+														{rep.username}
+													</List.Item>
+												)}
+											/>
+										) : <Text type="secondary">No representatives assigned.</Text>}
+									</Panel>
+								</Collapse>
+							</Card>
+						</Col>
+					))}
+				</Row>
+			) : (
+				<Card className="text-center shadow-md">
+					<Empty description="You are not assigned to any courses yet." />
 				</Card>
-			))}
-			<Modal
-				title="⚠️ Confirm Course Deletion"
-				open={modal}
-				onOk={handleRemoveCourse}
-				onCancel={() => setModal(false)}
-				okText="Yes, Delete"
-				cancelText="Cancel"
-				centered
-				okButtonProps={{ danger: true }}
-			>
-				<div style={{ padding: "10px" }}>
-					<p>
-						This action is irreversible and will remove all records associated
-						with this course.
-					</p>
-					<p style={{ color: "red", fontWeight: "bold" }}>
-						Please proceed with caution!
-					</p>
-				</div>
-			</Modal>
+			)}
 		</div>
 	);
 };

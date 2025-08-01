@@ -1,235 +1,155 @@
-import React, { useState } from "react";
-import { Button, Form, Input, Upload, message, Steps } from "antd";
-import { UploadOutlined } from "@ant-design/icons";
-import { useNavigate } from "react-router-dom";
-import { CSSTransition } from "react-transition-group";
-import "./stepForm.css";
-import { url } from "../Backendurl.js";
-
-const { Step } = Steps;
+import React, { useState } from 'react';
+import { Button, Form, Input, Upload, message, Card, Row, Col, Spin } from 'antd';
+import { UploadOutlined, BookOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
+import { url as backendUrl } from '../Backendurl'; // Corrected Import
 
 const RegisterFaculty = () => {
-	const [form] = Form.useForm();
-	const [loading, setLoading] = useState(false);
-	const [fileList, setFileList] = useState([]);
-	const [currentStep, setCurrentStep] = useState(0);
-	const [formData, setFormData] = useState({});
-	const navigate = useNavigate();
+    const [form] = Form.useForm();
+    const [isLoading, setIsLoading] = useState(false);
+    const [fileList, setFileList] = useState([]);
+    const navigate = useNavigate();
 
-	const steps = [
-		{
-			title: "Faculty Info",
-			content: (
-				<>
-					<Form.Item
-						label="Faculty Name"
-						name="facname"
-						rules={[
-							{
-								required: true,
-								message: "Please input the faculty name!",
-							},
-						]}
-					>
-						<Input placeholder="Enter faculty name" />
-					</Form.Item>
-					<Form.Item
-						label="Course Name"
-						name="coursename"
-						rules={[
-							{
-								required: true,
-								message: "Please input the course name!",
-							},
-						]}
-					>
-						<Input placeholder="Enter course name" />
-					</Form.Item>
-				</>
-			),
-		},
-		{
-			title: "Course Info",
-			content: (
-				<>
-					<Form.Item
-						label="Course Code"
-						name="coursecode"
-						rules={[
-							{
-								required: true,
-								message: "Please input the course code!",
-							},
-						]}
-					>
-						<Input placeholder="Enter course code" />
-					</Form.Item>
-					<Form.Item
-						label="Year"
-						name="year"
-						rules={[
-							{
-								required: true,
-								message: "Please input the year!",
-							},
-						]}
-					>
-						<Input placeholder="Enter year" />
-					</Form.Item>
-				</>
-			),
-		},
-		{
-			title: "Class & File",
-			content: (
-				<>
-					<Form.Item
-						label="Class"
-						name="class"
-						rules={[
-							{
-								required: true,
-								message: "Please input the class!",
-							},
-						]}
-					>
-						<Input placeholder="Enter class" />
-					</Form.Item>
-					<Form.Item
-						label="Upload CSV containing RegNo and StdName"
-						rules={[
-							{
-								required: true,
-								message: "Please upload a CSV file!",
-							},
-						]}
-					>
-						<Upload
-							accept=".csv"
-							fileList={fileList}
-							beforeUpload={() => false} // Prevent automatic upload
-							onChange={({ fileList }) => setFileList(fileList)}
-						>
-							<Button icon={<UploadOutlined />}>Select File</Button>
-						</Upload>
-					</Form.Item>
-				</>
-			),
-		},
-	];
+    const handleFileChange = ({ fileList }) => {
+        // Allow only one file to be uploaded
+        setFileList(fileList.slice(-1));
+    };
 
-	const handleSubmit = async () => {
-		try {
-			const values = await form.validateFields();
-			const file = fileList[0];
+    const handleSubmit = async (values) => {
+        if (fileList.length === 0) {
+            message.error('Please upload the student list CSV file!');
+            return;
+        }
 
-			if (!file) {
-				message.error("Please upload a CSV file!");
-				return;
-			}
+        setIsLoading(true);
 
-			// Combine all data
-			const finalData = { ...formData, ...values };
-			const formDataToSend = new FormData();
-			Object.entries(finalData).forEach(([key, value]) => {
-				formDataToSend.append(key, value);
-			});
-			formDataToSend.append("file", file.originFileObj);
+        const formDataToSend = new FormData();
+        Object.entries(values).forEach(([key, value]) => {
+            formDataToSend.append(key, value);
+        });
+        formDataToSend.append('file', fileList[0].originFileObj);
 
-			setLoading(true);
-			const response = await fetch(`${url}/students/create-course`, {
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${localStorage.getItem("token")}`,
-				},
-				body: formDataToSend,
-			});
+        try {
+            const token = localStorage.getItem('token');
+            // --- FIX: Using the new, correct RESTful endpoint ---
+            const response = await fetch(`${backendUrl}/faculty/courses`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+                body: formDataToSend,
+            });
 
-			if (!response.ok) {
-				throw new Error("Network response was not ok");
-			}
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to create the course.');
+            }
 
-			message.success("Course registered successfully!");
-			form.resetFields();
-			setFileList([]);
-			navigate("/attendance");
-		} catch (error) {
-			message.error("There was an error processing your request.");
-			console.error("Fetch error: ", error);
-		} finally {
-			setLoading(false);
-		}
-	};
+            message.success('Course registered successfully!');
+            form.resetFields();
+            setFileList([]);
+            navigate('/attendance');
+        } catch (error) {
+            message.error(error.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-	const next = async () => {
-		try {
-			const values = await form.validateFields();
-			setFormData({ ...formData, ...values });
-			setCurrentStep((prev) => prev + 1);
-		} catch (errorInfo) {
-			console.error("Failed to proceed to next step:", errorInfo);
-		}
-	};
+    return (
+        <div className="p-6 bg-gray-50 min-h-screen">
+            <h1 className="text-2xl font-bold mb-6 text-gray-800">
+                <BookOutlined /> Register New Course
+            </h1>
 
-	const prev = () => {
-		setCurrentStep((prev) => prev - 1);
-	};
+            <Card className="shadow-md">
+                <p className="text-md text-gray-600 mb-6">
+                    Fill in the details below and upload a CSV file with student information to create a new course.
+                </p>
 
-	return (
-		<div className="flex flex-col justify-center items-center m-4 bg-gray-100 p-4">
-			<p className="block text-lg text-gray-700 font-semibold">
-				<span className="text-red-500 font-bold text-left">*</span>Register
-				Course
-			</p>
-			<br />
-			<div className="w-full max-w-lg bg-white shadow-lg rounded-lg p-6">
-				<h2 className="text-slate-800 text-lg font-semibold text-center mb-4">
-					Register Course
-				</h2>
-				<Steps current={currentStep} className="mb-8">
-					{steps.map((step, index) => (
-						<Step key={index} title={step.title} />
-					))}
-				</Steps>
+                <Form
+                    form={form}
+                    layout="vertical"
+                    onFinish={handleSubmit}
+                    className="space-y-4"
+                >
+                    <Row gutter={24}>
+                        <Col xs={24} lg={12}>
+                            <Card title="Course Details" type="inner">
+                                <Form.Item
+                                    label="Course Name"
+                                    name="coursename"
+                                    rules={[{ required: true, message: 'Please input the course name!' }]}
+                                >
+                                    <Input placeholder="e.g., Introduction to Programming" />
+                                </Form.Item>
+                                <Form.Item
+                                    label="Course Code"
+                                    name="coursecode"
+                                    rules={[{ required: true, message: 'Please input the course code!' }]}
+                                >
+                                    <Input placeholder="e.g., CS101" />
+                                </Form.Item>
+                            </Card>
+                        </Col>
 
-				<Form form={form} layout="vertical" className="space-y-4">
-					<CSSTransition
-						in={currentStep === currentStep}
-						timeout={300}
-						classNames="fade"
-						unmountOnExit
-					>
-						{steps[currentStep].content}
-					</CSSTransition>
+                        <Col xs={24} lg={12}>
+                            <Card title="Class Details & Student List" type="inner">
+                                <Row gutter={16}>
+                                    <Col span={12}>
+                                        <Form.Item
+                                            label="Department / Year"
+                                            name="dept"
+                                            rules={[{ required: true, message: 'Please input the department or year!' }]}
+                                        >
+                                            <Input placeholder="e.g., CSE / 1" />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={12}>
+                                        <Form.Item
+                                            label="Class / Section"
+                                            name="class"
+                                            rules={[{ required: true, message: 'Please input the class section!' }]}
+                                        >
+                                            <Input placeholder="e.g., A" />
+                                        </Form.Item>
+                                    </Col>
+                                </Row>
+                                <Form.Item
+                                    label="Upload Student List (CSV)"
+                                    name="file"
+                                    rules={[{
+                                        validator: () => fileList.length > 0 ? Promise.resolve() : Promise.reject('Please upload a CSV file!')
+                                    }]}
+                                >
+                                    <Upload
+                                        accept=".csv"
+                                        fileList={fileList}
+                                        beforeUpload={() => false}
+                                        onChange={handleFileChange}
+                                        maxCount={1}
+                                    >
+                                        <Button icon={<UploadOutlined />}>Select File</Button>
+                                    </Upload>
+                                </Form.Item>
+                            </Card>
+                        </Col>
+                    </Row>
 
-					<Form.Item>
-						<div className="flex justify-between">
-							{currentStep > 0 && (
-								<Button onClick={prev} className="mr-2">
-									Previous
-								</Button>
-							)}
-							{currentStep < steps.length - 1 && (
-								<Button type="primary" onClick={next}>
-									Next
-								</Button>
-							)}
-							{currentStep === steps.length - 1 && (
-								<Button
-									type="primary"
-									htmlType="submit"
-									loading={loading}
-									onClick={handleSubmit}
-								>
-									Submit
-								</Button>
-							)}
-						</div>
-					</Form.Item>
-				</Form>
-			</div>
-		</div>
-	);
+                    <Form.Item className="mt-6 text-right">
+                        <Button
+                            type="primary"
+                            htmlType="submit"
+                            loading={isLoading}
+                            size="large"
+                        >
+                            Create Course
+                        </Button>
+                    </Form.Item>
+                </Form>
+            </Card>
+        </div>
+    );
 };
 
 export default RegisterFaculty;

@@ -1,194 +1,106 @@
-import React, { useState, useEffect } from "react";
-import { Table, Button, Spin, Select, Alert } from "antd";
-import { url } from "../Backendurl";
+import React from 'react';
+import { Table, Button, message, Checkbox } from 'antd';
+import { url as backendUrl } from '../Backendurl';
 
-const { Option } = Select;
+const AttendanceTable = ({ students, setStudents, course, date, hour, initialData }) => {
 
-const AttendanceTable = ({
-	currDate,
-	data,
-	setData,
-	setLoading,
-	loading,
-	hr,
-	course,
-	yr,
-	Class,
-	fetchAttendance,
-	exp,
-	freeze,
-	setFreeze,
-}) => {
-	const [localData, setLocalData] = useState(data);
-	const [error, setError] = useState(null);
-
-	useEffect(() => {
-		setLocalData(data);
-		console.log("Local Data Set:", data); // Debugging Log
-	}, [data]);
-
-	const handleSave = async () => {
-		setLoading(true);
-		try {
-			const updatedData = localData.map((record) => ({
-				...record,
-				// freeze: true,
-			}));
-
-			const response = await fetch(`${url}/attendance/update`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${localStorage.getItem("token")}`,
-				},
-				body: JSON.stringify({
-					date: currDate,
-					coursecode: course,
-					coursename: course,
-					hr,
-					freeze: true,
-					attendance: updatedData,
-				}),
-			});
-			const result = await response.json();
-
-			if (response.ok) {
-				setData(updatedData);
-				fetchAttendance();
-				setError(null);
-			} else {
-				setError(result.message || "Failed to update attendance data.");
-			}
-		} catch (err) {
-			setError("An error occurred while saving attendance data.");
-			console.error(err);
-		} finally {
-			setLoading(false);
-		}
+	const handleStatusChange = (regNo, newStatus) => {
+		const updatedStudents = students.map((student) =>
+			student.RegNo === regNo ? { ...student, status: newStatus } : student
+		);
+		setStudents(updatedStudents);
 	};
 
-	const handleAttendanceChange = (value, RegNo) => {
-		setLocalData((prevData) =>
-			prevData.map((record) =>
-				record.RegNo === RegNo ? { ...record, status: value } : record
-			)
-		);
+	const handleSubmit = async () => {
+		try {
+			const token = localStorage.getItem('token');
+			const response = await fetch(`${backendUrl}/attendance/records`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${token}`,
+				},
+				body: JSON.stringify({
+					coursecode: course.coursecode,
+					coursename: course.coursename,
+					date: date,
+					hr: [hour], // API expects an array
+					attendance: students.map(({ RegNo, status }) => ({ RegNo, status })),
+				}),
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.message || 'Failed to submit attendance.');
+			}
+
+			message.success('Attendance submitted successfully!');
+			// Optionally, you might want to disable the table or navigate away
+		} catch (error) {
+			message.error(error.message);
+		}
 	};
 
 	const columns = [
 		{
-			title: "Roll Number",
-			dataIndex: "RegNo",
-			key: "RegNo",
-			fixed: "left",
+			title: 'Reg. No',
+			dataIndex: 'RegNo',
+			key: 'RegNo',
 		},
 		{
-			title: "Student Name",
-			dataIndex: "Name",
-			key: "Name",
+			title: 'Name',
+			dataIndex: 'Name',
+			key: 'Name',
 		},
 		{
-			title: "Status",
-			dataIndex: "status",
-			key: "status",
-			render: (text, record) => {
-				if (freeze) {
-					return (
-						<span
-							className={
-								record.status === 1
-									? "text-black"
-									: record.status === -1
-									? "text-red-500 font-semibold"
-									: "text-yellow-500 font-semibold"
-							}
-						>
-							{record.status === 1
-								? "Present"
-								: record.status === -1
-								? "Absent"
-								: "On Duty"}
-						</span>
-					);
-				} else {
-					return (
-						<Select
-							value={record.status}
-							onChange={(value) => handleAttendanceChange(value, record.RegNo)}
-							status={
-								record.status === -1
-									? "error"
-									: record.status === 2
-									? "warning"
-									: ""
-							}
-						>
-							<Option value={1}>Present</Option>
-							<Option value={-1}>Absent</Option>
-							<Option value={2}>On Duty</Option>
-						</Select>
-					);
-				}
-			},
+			title: 'Status',
+			key: 'status',
+			render: (_, record) => (
+				<div className="flex gap-4">
+					<Checkbox
+						checked={record.status === 1}
+						onChange={() => handleStatusChange(record.RegNo, 1)}
+					>
+						Present
+					</Checkbox>
+					<Checkbox
+						checked={record.status === -1}
+						onChange={() => handleStatusChange(record.RegNo, -1)}
+					>
+						Absent
+					</Checkbox>
+					<Checkbox
+						checked={record.status === 2}
+						onChange={() => handleStatusChange(record.RegNo, 2)}
+					>
+						On-Duty
+					</Checkbox>
+				</div>
+			),
 		},
 	];
 
+	// Disable the submit button if the attendance is already frozen or expired
+	const isSubmissionDisabled = initialData?.freeze || initialData?.isExpired;
+
 	return (
 		<div>
-			{loading ? (
-				<Spin />
-			) : (
-				<>
-					{error && <p style={{ color: "red" }}>{error}</p>}
-					<Table
-						columns={columns}
-						dataSource={localData}
-						rowKey={(record) => record._id}
-						pagination={false}
-						className="overflow-x-scroll"
-					/>
-					{localData.length > 0 && !exp && !freeze && (
-						<Button
-							type="button"
-							onClick={handleSave}
-							className="relative py-0 px-4 h-10 mt-4  rounded-lg transition-all  w-[200px] duration-300 bg-blue-500 text-white border-2 border-blue-500 hover:bg-white hover:text-blue-500 hover:border-blue-500 hover:shadow-md hover:shadow-blue-500/50  outline-none flex flex-row justify-center items-center font-semibold"
-							disabled={loading}
-						>
-							Save Attendance
-						</Button>
-					)}
-					{/* {localData.length > 0 && !exp && freeze && (
-						<button
-							type="button"
-							onClick={() => setFreeze(false)}
-							className="relative py-0 px-4 h-10 mt-4 rounded-lg transition-all  w-[200px] duration-300 bg-blue-500 text-white border-2 border-blue-500 hover:bg-white hover:text-blue-500 hover:border-blue-500 hover:shadow-md hover:shadow-blue-500/50  outline-none flex flex-row justify-center items-center font-semibold"
-							disabled={loading}
-						>
-							UnFreeze
-						</button>
-					)} */}
-					{localData.length > 0 && exp && freeze && (
-						<Alert
-							// message="warning"
-							description="The attendance record has been frozen.Kindly contact your faculty!"
-							type="warning"
-							// showIcon
-							closable
-							className="mt-4"
-						/>
-					)}
-					{localData.length > 0 && !exp && (
-						<Alert
-							// message="warning"
-							description="The attendance record will be frozen after 7 days."
-							type="warning"
-							// showIcon
-							closable
-							className="mt-4"
-						/>
-					)}
-				</>
-			)}
+			<Table
+				dataSource={students}
+				columns={columns}
+				rowKey="RegNo"
+				pagination={false}
+				bordered
+			/>
+			<div className="text-right mt-4">
+				<Button
+					type="primary"
+					onClick={handleSubmit}
+					disabled={isSubmissionDisabled}
+				>
+					{isSubmissionDisabled ? 'Attendance Submitted' : 'Submit Attendance'}
+				</Button>
+			</div>
 		</div>
 	);
 };

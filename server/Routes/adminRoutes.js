@@ -1,16 +1,19 @@
-const app = require("express");
-const Router = app.Router();
-const authenticateToken = require("../Middleware/middleware");
+const { Router } = require('express');
+const { protect } = require('../Middleware/middleware');
 const {
-	auth,
-	register,
-	addRep,
-	removeRep,
-} = require("../Controllers/adminController");
+    auth,
+    register,
+    addRep,
+    removeRep,
+} = require('../Controllers/adminController');
 
-Router.post("/login", auth);
-Router.post("/register", register);
-Router.post("/add-rep", authenticateToken, addRep);
-Router.post("/remove-rep", authenticateToken, removeRep);
+const router = Router();
 
-module.exports = Router;
+router.post('/auth/login', auth);
+router.post('/auth/register', register);
+
+router.route('/representatives')
+    .post(protect, addRep)
+    .delete(protect, removeRep);
+
+module.exports = router;

@@ -1,59 +1,58 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
-const createReportCollection = (courseCode) => {
-	// Check if the model already exists
-	const modelName = `reports_${courseCode}`;
-	if (mongoose.models[modelName]) {
-		return mongoose.models[modelName];
-	}
+const reportSchema = new mongoose.Schema(
+    {
+        course: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Course',
+            required: true,
+            index: true,
+        },
+        faculty: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Admin',
+            required: true,
+        },
+        hr: {
+            type: Number,
+            required: true,
+        },
+        date: {
+            type: Date,
+            required: true,
+            index: true,
+        },
+        freeze: {
+            type: Boolean,
+            default: false,
+        },
+        isExpired: {
+            type: Boolean,
+            default: false,
+        },
+        attendance: [
+            {
+                _id: false,
+                student: {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: 'Student',
+                    required: true,
+                },
+                status: {
+                    type: Number,
+                    required: true,
+                    enum: [1, -1, 2], // 1: Present, -1: Absent, 2: On-Duty
+                },
+            },
+        ],
+    },
+    {
+        timestamps: true,
+    }
+);
 
-	const reportSchema = new mongoose.Schema(
-		{
-			faculty: {
-				type: mongoose.Schema.Types.ObjectId,
-				// ref: "Admin",
-				required: true,
-			},
-			coursename: {
-				type: String,
-				required: true,
-			},
-			coursecode: {
-				type: String,
-				required: true,
-			},
-			hr: {
-				type: Number,
-				required: true,
-			},
-			date: {
-				type: Date,
-				required: true,
-			},
-			freeze: {
-				type: Boolean,
-				required: true,
-			},
-			isExpired: {
-				type: Boolean,
-				required: true,
-			},
-			attendance: [
-				{
-					RegNo: { type: String },
-					Name: { type: String },
-					status: { type: Number, required: true },
-					// freeze: { type: Boolean, required: true },
-				},
-			],
-		},
-		{
-			timestamps: true,
-		}
-	);
+reportSchema.index({ course: 1, date: 1, hr: 1 }, { unique: true });
 
-	// Create and return the model
-	return mongoose.model(modelName, reportSchema);
-};
+const Report = mongoose.model('Report', reportSchema);
 
-module.exports = createReportCollection;
+module.exports = Report;

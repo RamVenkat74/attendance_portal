@@ -1,20 +1,43 @@
-const jwt = require("jsonwebtoken");
-require("dotenv").config();
+const jwt = require('jsonwebtoken');
+const asyncHandler = require('express-async-handler');
+const Admin = require('../Models/adminModel');
 
-const authenticateToken = (req, res, next) => {
-	const authHeader = req.headers["authorization"];
-	const token = authHeader && authHeader.split(" ")[1];
-	console.log(authHeader);
-	if (token == null)
-		return res.status(401).json({ message: "No token provided" });
+const protect = asyncHandler(async (req, res, next) => {
+	let token;
 
-	jwt.verify(token, process.env.JWT_SECRET_KEY, (err, user) => {
-		if (err) return res.status(403).json({ message: "Invalid token" });
+	if (
+		req.headers.authorization &&
+		req.headers.authorization.startsWith('Bearer')
+	) {
+		try {
+			token = req.headers.authorization.split(' ')[1];
+			const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+			req.user = await Admin.findById(decoded.id).select('-password');
 
-		// Attach user to the request
-		req.user = user;
+			if (!req.user) {
+				res.status(401);
+				throw new Error('Not authorized, user not found');
+			}
+			next();
+		} catch (error) {
+			res.status(401);
+			throw new Error('Not authorized, token failed');
+		}
+	}
+
+	if (!token) {
+		res.status(401);
+		throw new Error('Not authorized, no token');
+	}
+});
+
+const admin = (req, res, next) => {
+	if (req.user && req.user.role === 'A') {
 		next();
-	});
+	} else {
+		res.status(403);
+		throw new Error('Not authorized as an admin');
+	}
 };
 
-module.exports = authenticateToken;
+module.exports = { protect, admin };

@@ -1,24 +1,41 @@
-const express = require("express");
-const router = express.Router();
+const { Router } = require('express');
+const { protect } = require('../Middleware/middleware');
 const {
-	fetchData,
 	updateAttendance,
+	fetchData,
 	studentDashboard,
-	FinalStudentData,
+	unmarkedAttendanceHours,
 	deleteRecord,
-	unmarkedAttendanceHours
-} = require("../Controllers/AttendanceController");
-const authenticateToken = require("../Middleware/middleware");
+	getRecordsByCourse, // Import the new function
+} = require('../Controllers/AttendanceController');
 
-// Update attendance data
-router.post("/update", authenticateToken, updateAttendance);
-router.post("/pending-hours", authenticateToken, unmarkedAttendanceHours);
+const router = Router();
 
-router.post("/student-dashboard", authenticateToken, studentDashboard);
-router.delete("/record", authenticateToken, deleteRecord);
+// Apply authentication middleware to all routes in this file for security
+router.use(protect);
 
-router.post("/getDashboardData", authenticateToken, FinalStudentData);
-// Fetch attendance data for a specific date
-router.post("/get-attendance", authenticateToken, fetchData);
+// --- Attendance Record Management ---
+
+// POST /api/attendance/records - Create or update attendance for a session
+router.post('/records', updateAttendance);
+
+// DELETE /api/attendance/records - Delete a specific attendance record
+router.delete('/records', deleteRecord);
+
+// GET /api/attendance/records/:courseId - Get all records for a specific course
+router.get('/records/:courseId', getRecordsByCourse);
+
+
+// --- Data Fetching & Reporting ---
+
+// POST /api/attendance/data - Fetch initial student data for marking attendance
+router.post('/data', fetchData);
+
+// POST /api/attendance/dashboard - Generate a detailed report for a class or student
+router.post('/dashboard', studentDashboard);
+
+// POST /api/attendance/unmarked - Get a list of unmarked attendance hours
+router.post('/unmarked', unmarkedAttendanceHours);
+
 
 module.exports = router;

@@ -1,23 +1,13 @@
 const mongoose = require('mongoose');
 
-const TimetableSchema = new mongoose.Schema(
+const timetableSchema = new mongoose.Schema(
 	{
-		coursename: {
-			type: String,
-			required: true,
-		},
-		coursecode: {
-			type: String,
+		course: {
+			type: mongoose.Schema.Types.ObjectId,
+			ref: 'Course',
 			required: true,
 			unique: true,
-		},
-		dept: {
-			type: String,
-			required: true,
-		},
-		yr: {
-			type: Number,
-			required: true,
+			index: true,
 		},
 		timetable: {
 			monday: { type: [Number], default: [] },
@@ -32,5 +22,6 @@ const TimetableSchema = new mongoose.Schema(
 	}
 );
 
-const TimetableModel = mongoose.model('Timetable', TimetableSchema);
-module.exports = TimetableModel;
+const Timetable = mongoose.model('Timetable', timetableSchema);
+
+module.exports = Timetable;

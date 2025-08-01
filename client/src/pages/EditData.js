@@ -1,490 +1,265 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-	Table,
-	Alert,
-	Button,
-	message,
-	Row,
-	Col,
-	Card,
-	Select,
-	Modal,
-	Form,
-	Input,
+    Table,
+    Button,
+    message,
+    Row,
+    Col,
+    Card,
+    Select,
+    Modal,
+    Form,
+    Input,
+    Spin,
+    Empty,
+    Popconfirm,
 } from 'antd';
-import { DeleteTwoTone, EditOutlined } from '@ant-design/icons';
-import { url } from '../Backendurl';
+import { DeleteOutlined, EditOutlined, UserAddOutlined, PlusOutlined } from '@ant-design/icons';
+import { url as backendUrl } from '../Backendurl';
 
-const EditData = ({ setAuth, user }) => {
-	const [courses, setCourses] = useState([]);
-	const [loading, setLoading] = useState(false);
-	const [data, setData] = useState([]);
-	const [coursecode, setCoursecode] = useState('');
-	const [modal, showModal] = useState(false);
-	const [modal2, showModal2] = useState(false);
-	const [addcourse, setAddCourse] = useState('');
-	const [count, setCount] = useState(0);
-	const [form] = Form.useForm();
-	const [form2] = Form.useForm();
-	const [del, setDel] = useState('');
-	const [modal3, setModal3] = useState(false);
-	const [editingKey, setEditingKey] = useState('');
-	const [editableData, setEditableData] = useState({});
+const EditData = () => {
+    const [courses, setCourses] = useState([]);
+    const [selectedCourse, setSelectedCourse] = useState(null);
+    const [students, setStudents] = useState([]);
 
-	// Fetch courses when the component mounts
-	useEffect(() => {
-		const fetchCourses = async () => {
-			setLoading(true);
-			try {
-				const coursesResponse = await fetch(`${url}/students/faculty-data`, {
-					headers: {
-						Authorization: `Bearer ${localStorage.getItem('token')}`,
-					},
-				});
-				const coursesData = await coursesResponse.json();
-				setCourses(Array.isArray(coursesData.course) ? coursesData.course : []);
-			} catch (err) {
-				message.error('Failed to fetch courses. Please try again.');
-				console.error(err);
-			} finally {
-				setLoading(false);
-			}
-		};
-		document.title = 'ATTENDANCE SYSTEM | EDIT';
-		fetchCourses();
-	}, []);
+    // Loading states
+    const [isCoursesLoading, setIsCoursesLoading] = useState(true);
+    const [isStudentsLoading, setIsStudentsLoading] = useState(false);
 
-	const addAdmin = () => {
-		showModal2(true);
-	};
+    // Modal states
+    const [isStudentModalVisible, setIsStudentModalVisible] = useState(false);
+    const [isRepModalVisible, setIsRepModalVisible] = useState(false);
+    const [editingStudent, setEditingStudent] = useState(null);
 
-	const onFinishAdmin = async (values) => {
-		try {
-			const response = await fetch(`${url}/admin/add-rep`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${localStorage.getItem('token')}`,
-				},
-				body: JSON.stringify({ ...values, coursecode: addcourse }),
-			});
+    const [studentForm] = Form.useForm();
+    const [repForm] = Form.useForm();
 
-			if (!response.ok) {
-				throw new Error(`Error: ${response.status}`);
-			}
+    // --- Data Fetching ---
 
-			const result = await response.json();
-			message.success(result.message);
-			showModal2(false);
-			form2.resetFields();
-			// fetchStudents();
-		} catch (err) {
-			console.error('Error adding Admin:', err);
-			message.error('Failed to add admin. Please check the details.');
-		}
-	};
-	const onFinishStudent = async (values) => {
-		try {
-			const response = await fetch(`${url}/students/add-student`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${localStorage.getItem('token')}`,
-				},
-				body: JSON.stringify({ ...values, coursecode: addcourse }),
-			});
+    // 1. Fetch the faculty's assigned courses on component mount
+    useEffect(() => {
+        const fetchCourses = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                // --- FIX: Calling the new, correct dashboard endpoint ---
+                const response = await fetch(`${backendUrl}/faculty/dashboard`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!response.ok) throw new Error('Failed to fetch courses.');
+                const data = await response.json();
+                setCourses(data || []);
+            } catch (err) {
+                message.error(err.message || 'Failed to fetch courses.');
+            } finally {
+                setIsCoursesLoading(false);
+            }
+        };
+        fetchCourses();
+        document.title = 'ATTENDANCE SYSTEM | EDIT DATA';
+    }, []);
 
-			if (!response.ok) {
-				throw new Error(`Error: ${response.status}`);
-			}
+    // 2. Fetch students whenever a course is selected
+    const fetchStudents = async (courseId) => {
+        if (!courseId) return;
+        setIsStudentsLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            // Using the new RESTful endpoint
+            const response = await fetch(`${backendUrl}/faculty/courses/${courseId}/students`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) throw new Error('Failed to fetch students for this course.');
+            const data = await response.json();
+            setStudents(data);
+        } catch (error) {
+            message.error(error.message);
+        } finally {
+            setIsStudentsLoading(false);
+        }
+    };
 
-			const result = await response.json();
-			message.success(result.message);
+    // --- Modal Handling ---
 
-			form2.resetFields();
-			fetchStudents();
-		} catch (err) {
-			console.error('Error adding student:', err);
-			message.error('Failed to add student. Please check the details.');
-		} finally {
-			showModal(false);
-		}
-	};
+    const showStudentModal = (student = null) => {
+        setEditingStudent(student);
+        studentForm.setFieldsValue(student || { StdName: '', RegNo: '' });
+        setIsStudentModalVisible(true);
+    };
 
-	// Delete student
-	const deleteStudent = async () => {
-		try {
-			const response = await fetch(`${url}/students/delete-student`, {
-				method: 'DELETE',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${localStorage.getItem('token')}`,
-				},
-				body: JSON.stringify({ coursecode, RegNo: del }),
-			});
+    const showRepModal = () => {
+        repForm.resetFields();
+        setIsRepModalVisible(true);
+    };
 
-			if (!response.ok) {
-				throw new Error(`Error: ${response.status}`);
-			}
+    const handleCancel = () => {
+        setIsStudentModalVisible(false);
+        setIsRepModalVisible(false);
+        setEditingStudent(null);
+    };
 
-			message.success('Student deleted successfully.');
-			setDel('');
-			setModal3(false);
-			fetchStudents();
-		} catch (error) {
-			console.error('Error deleting student:', error);
-			message.error('Failed to delete student. Please try again.');
-		}
-	};
+    // --- API Operations (CRUD) ---
 
-	// Fetch students for the selected course
-	const fetchStudents = async () => {
-		if (coursecode === '') {
-			message.error('Please select a course!');
-			return;
-		}
-		try {
-			const response = await fetch(`${url}/students/${coursecode}`, {
-				method: 'GET',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${localStorage.getItem('token')}`,
-				},
-			});
+    // Add or Edit a Student
+    const handleStudentFormFinish = async (values) => {
+        // This functionality would require new dedicated endpoints.
+        // For now, we'll add a placeholder message.
+        message.info('Add/Edit student functionality to be implemented with new endpoints.');
+        handleCancel();
+    };
 
-			if (!response.ok) {
-				throw new Error(`Error: ${response.status}`);
-			}
+    // Delete a Student
+    const handleDeleteStudent = async (studentId) => {
+        // This functionality would require a new dedicated endpoint.
+        message.info('Delete student functionality to be implemented with a new endpoint.');
+    };
 
-			const studentsData = await response.json();
-			setData(studentsData);
-			setCount(studentsData.length);
-		} catch (error) {
-			console.error('Error fetching students:', error);
-			message.error('Failed to fetch student data. Please try again.');
-		}
-	};
+    // Add a Representative
+    const handleRepFormFinish = async (values) => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${backendUrl}/admin/representatives`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ ...values, coursecode: selectedCourse.coursecode }),
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message);
+            }
+            message.success('Representative added successfully!');
+            handleCancel();
+        } catch (error) {
+            message.error(error.message);
+        }
+    };
 
-	const handleDoubleClick = (record) => {
-		setEditingKey(record.RegNo);
-		setEditableData({ ...record });
-	};
+    const columns = [
+        { title: 'Registration Number', dataIndex: 'RegNo', key: 'RegNo' },
+        { title: 'Name', dataIndex: 'StdName', key: 'StdName' },
+        {
+            title: 'Actions',
+            key: 'actions',
+            render: (_, record) => (
+                <div className="flex gap-4">
+                    <Button icon={<EditOutlined />} onClick={() => showStudentModal(record)}>
+                        Edit
+                    </Button>
+                    <Popconfirm
+                        title="Delete Student"
+                        description="Are you sure you want to delete this student?"
+                        onConfirm={() => handleDeleteStudent(record._id)}
+                        okText="Yes, Delete"
+                        cancelText="Cancel"
+                        okButtonProps={{ danger: true }}
+                    >
+                        <Button danger icon={<DeleteOutlined />}>
+                            Delete
+                        </Button>
+                    </Popconfirm>
+                </div>
+            ),
+        },
+    ];
 
-	const handleInputChange = (key, value) => {
-		setEditableData({ ...editableData, [key]: value });
-	};
+    return (
+        <div className="p-6 bg-gray-50 min-h-screen">
+            <h1 className="text-2xl font-bold mb-6 text-gray-800">Manage Course Data</h1>
 
-	const saveChanges = async () => {
-		try {
-			const { RegNo, StdName } = editableData;
-			const response = await fetch(`${url}/students/edit-student`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${localStorage.getItem('token')}`,
-				},
-				body: JSON.stringify({
-					oldname: data.find((d) => d.RegNo === editingKey).StdName,
-					oldreg: editingKey,
-					newname: StdName,
-					newreg: RegNo,
-					coursecode,
-				}),
-			});
+            <Card className="shadow-md mb-6">
+                <Row gutter={[16, 16]} align="bottom">
+                    <Col xs={24} md={12}>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Select a Course to Manage</label>
+                        <Select
+                            loading={isCoursesLoading}
+                            className="w-full"
+                            placeholder="Select a course"
+                            value={selectedCourse?._id}
+                            onChange={(value) => {
+                                const course = courses.find(c => c._id === value);
+                                setSelectedCourse(course);
+                                fetchStudents(value);
+                            }}
+                            options={courses.map((course) => ({
+                                label: `${course.coursename} (${course.coursecode})`,
+                                value: course._id,
+                            }))}
+                        />
+                    </Col>
+                    <Col xs={24} md={12}>
+                        {selectedCourse && (
+                            <div className="flex gap-2">
+                                <Button type="primary" icon={<UserAddOutlined />} onClick={() => showStudentModal()}>
+                                    Add Student
+                                </Button>
+                                <Button icon={<PlusOutlined />} onClick={showRepModal}>
+                                    Add Representative
+                                </Button>
+                            </div>
+                        )}
+                    </Col>
+                </Row>
+            </Card>
 
-			if (!response.ok) {
-				throw new Error('Failed to update student data');
-			}
+            <Card className="shadow-md">
+                <h2 className="text-xl font-semibold mb-4">
+                    {selectedCourse ? `Students in ${selectedCourse.coursecode}` : 'Select a course to see students'}
+                </h2>
+                {isStudentsLoading ? (
+                    <div className="text-center"><Spin size="large" /></div>
+                ) : students.length > 0 ? (
+                    <Table
+                        columns={columns}
+                        dataSource={students}
+                        rowKey="_id"
+                        pagination={{ pageSize: 10 }}
+                        scroll={{ x: 'max-content' }}
+                    />
+                ) : (
+                    <Empty description={selectedCourse ? 'No students found for this course.' : 'Please select a course.'} />
+                )}
+            </Card>
 
-			message.success('Student data updated successfully');
-			setEditingKey('');
-			fetchStudents();
-		} catch (err) {
-			message.error('Error updating student data');
-			console.error('Update error', err);
-		}
-	};
+            <Modal
+                title={editingStudent ? 'Edit Student' : 'Add New Student'}
+                open={isStudentModalVisible}
+                onCancel={handleCancel}
+                footer={null}
+                destroyOnClose
+            >
+                <Form form={studentForm} layout="vertical" onFinish={handleStudentFormFinish}>
+                    <Form.Item label="Student Name" name="StdName" rules={[{ required: true }]}>
+                        <Input placeholder="Enter student's full name" />
+                    </Form.Item>
+                    <Form.Item label="Registration Number" name="RegNo" rules={[{ required: true }]}>
+                        <Input placeholder="Enter student's registration number" />
+                    </Form.Item>
+                    <Form.Item className="text-right">
+                        <Button onClick={handleCancel} style={{ marginRight: 8 }}>Cancel</Button>
+                        <Button type="primary" htmlType="submit">
+                            {editingStudent ? 'Update' : 'Add'}
+                        </Button>
+                    </Form.Item>
+                </Form>
+            </Modal>
 
-	// Cancel editing without saving
-	const cancelEdit = () => {
-		setEditingKey('');
-		setEditableData({});
-	};
-
-	const columns = [
-		{
-			title: 'Registration Number',
-			dataIndex: 'RegNo',
-			key: 'RegNo',
-			render: (text, record) =>
-				editingKey === record.RegNo ? (
-					<Input
-						value={editableData.RegNo}
-						onChange={(e) => handleInputChange('RegNo', e.target.value)}
-						onPressEnter={saveChanges}
-						onBlur={saveChanges}
-					/>
-				) : (
-					<span onDoubleClick={() => handleDoubleClick(record)}>{text}</span>
-				),
-		},
-		{
-			title: 'Name',
-			dataIndex: 'StdName',
-			key: 'StdName',
-			render: (text, record) =>
-				editingKey === record.RegNo ? (
-					<Input
-						value={editableData.StdName}
-						onChange={(e) => handleInputChange('StdName', e.target.value)}
-						onPressEnter={saveChanges}
-						onBlur={saveChanges}
-					/>
-				) : (
-					<span onDoubleClick={() => handleDoubleClick(record)}>{text}</span>
-				),
-		},
-		{
-			title: 'Remove Student',
-			key: 'action',
-			render: (text, record) => (
-				<Button
-					type='danger'
-					onClick={() => {
-						setModal3(true);
-						setDel(record.RegNo);
-					}}
-				>
-					<DeleteTwoTone />
-				</Button>
-			),
-		},
-	];
-
-	return (
-		<div className='md:m-2 flex flex-col gap-2 md:block'>
-			<h2 className='block text-lg text-gray-700 font-semibold mb-4'>
-				<EditOutlined />
-				Edit Students Details
-			</h2>
-			<Row gutter={[16, 16]}>
-				{courses.length > 0 && (
-					<Col xs={24} sm={12} md={8}>
-						<Card>
-							<p className='text-gray-500 mb-2'>
-								<span className='text-red-500'>* </span>Select the Course
-							</p>
-							<Select
-								onChange={(v) => setCoursecode(v)}
-								value={coursecode}
-								options={courses.map((course) => ({
-									label: `${course.coursename} - ${course.coursecode}`,
-									value: course.coursecode,
-								}))}
-								className='w-full'
-							/>
-						</Card>
-					</Col>
-				)}
-			</Row>
-			<Row gutter={[16, 16]}>
-				<Col xs={24} sm={12} md={8} className='md:mt-4'>
-					<Button type='primary' onClick={fetchStudents} className='w-full'>
-						Get Data
-					</Button>
-				</Col>
-			</Row>
-			<Row gutter={[16, 16]}>
-				<Col xs={24} sm={12} md={8} className='md:mt-4'>
-					<Button
-						type='primary'
-						onClick={() => showModal(true)}
-						className='w-full'
-					>
-						Add Student
-					</Button>
-				</Col>
-			</Row>
-			<Row gutter={[16, 16]}>
-				<Col xs={24} sm={12} md={8} className='md:mt-4'>
-					<Button type='primary' onClick={addAdmin} className='w-full'>
-						Add Admin
-					</Button>
-				</Col>
-			</Row>
-			{data.length > 0 && (
-				<Alert
-					message={"Double Click on the name/reg no to edit student's data"}
-					type='info'
-					className='mt-4'
-				/>
-			)}
-			<Row gutter={[16, 16]} className='mt-4'>
-				<Col span={24}>
-					{data.length > 0 && (
-						<Table
-							columns={columns}
-							dataSource={data}
-							rowKey='RegNo'
-							pagination={false}
-							loading={loading}
-							className='bg-white overflow-x-auto'
-						/>
-					)}
-				</Col>
-			</Row>
-			<Modal
-				title='Add Representative'
-				open={modal2}
-				onCancel={() => showModal2(false)}
-				footer={null}
-			>
-				<Form
-					form={form2}
-					name='add_admin'
-					onFinish={onFinishAdmin}
-					autoComplete='off'
-				>
-					<Form.Item
-						label='User Name'
-						name='username'
-						rules={[
-							{
-								required: true,
-								message: 'Please input the username!',
-							},
-						]}
-					>
-						<Input />
-					</Form.Item>
-
-					<Form.Item
-						label='Password'
-						name='password'
-						rules={[
-							{
-								required: true,
-								message: 'Please input the password!',
-							},
-						]}
-					>
-						<Input.Password />
-					</Form.Item>
-					<Form.Item
-						label='Course'
-						name='coursecode'
-						rules={[
-							{
-								required: true,
-								message: 'Please select the course!',
-							},
-						]}
-					>
-						<Select
-							onChange={(v) => setAddCourse(v)}
-							value={addcourse}
-							options={courses.map((course) => ({
-								label: `${course.coursename} - ${course.coursecode}`,
-								value: course.coursecode,
-							}))}
-							className='w-full'
-						/>
-					</Form.Item>
-
-					<Form.Item>
-						<Button type='primary' htmlType='submit' className='w-full'>
-							Add Representative
-						</Button>
-					</Form.Item>
-				</Form>
-			</Modal>
-			<Modal
-				title='Add Student'
-				open={modal}
-				onCancel={() => showModal(false)}
-				footer={null}
-			>
-				<Form
-					form={form}
-					name='add_student'
-					onFinish={onFinishStudent}
-					autoComplete='off'
-				>
-					<Form.Item
-						label='Student Name'
-						name='StdName'
-						rules={[
-							{
-								required: true,
-								message: 'Please input the Student name!',
-							},
-						]}
-					>
-						<Input />
-					</Form.Item>
-
-					<Form.Item
-						label='Roll Number'
-						name='RegNo'
-						rules={[
-							{
-								required: true,
-								message: 'Please input the reg no!',
-							},
-						]}
-					>
-						<Input />
-					</Form.Item>
-					<Form.Item
-						label='Course'
-						name='coursecode'
-						rules={[
-							{
-								required: true,
-								message: 'Please select the course!',
-							},
-						]}
-					>
-						<Select
-							onChange={(v) => setAddCourse(v)}
-							value={addcourse}
-							options={courses.map((course) => ({
-								label: `${course.coursename} - ${course.coursecode}`,
-								value: course.coursecode,
-							}))}
-							className='w-full'
-						/>
-					</Form.Item>
-
-					<Form.Item>
-						<Button type='primary' htmlType='submit' className='w-full'>
-							Add Student
-						</Button>
-					</Form.Item>
-				</Form>
-			</Modal>
-			<Modal
-				title='⚠️ Confirm Student Deletion'
-				open={modal3}
-				onOk={deleteStudent}
-				onCancel={() => setModal3(false)}
-				okText='Yes, Delete'
-				cancelText='Cancel'
-				centered
-				okButtonProps={{ danger: true }}
-			>
-				<div style={{ padding: '10px' }}>
-					<p>
-						This action is irreversible and will remove all records associated
-						with this student.
-					</p>
-					<p style={{ color: 'red', fontWeight: 'bold' }}>
-						Please proceed with caution!
-					</p>
-				</div>
-			</Modal>
-		</div>
-	);
+            <Modal title="Add New Representative" open={isRepModalVisible} onCancel={handleCancel} footer={null} destroyOnClose>
+                <Form form={repForm} layout="vertical" onFinish={handleRepFormFinish}>
+                    <Form.Item label="Username" name="username" rules={[{ required: true }]}>
+                        <Input placeholder="Enter representative's username" />
+                    </Form.Item>
+                    <Form.Item label="Password" name="password" rules={[{ required: true }]}>
+                        <Input.Password placeholder="Enter a temporary password" />
+                    </Form.Item>
+                    <Form.Item className="text-right">
+                        <Button onClick={handleCancel} style={{ marginRight: 8 }}>Cancel</Button>
+                        <Button type="primary" htmlType="submit">
+                            Add Representative
+                        </Button>
+                    </Form.Item>
+                </Form>
+            </Modal>
+        </div>
+    );
 };
 
 export default EditData;

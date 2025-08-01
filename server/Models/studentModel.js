@@ -1,24 +1,25 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
-const createStudentCollection = (courseCode) => {
-	// Check if the model already exists
-	const modelName = `students_${courseCode}`;
-	if (mongoose.models[modelName]) {
-		return mongoose.models[modelName];
-	}
+const studentSchema = new mongoose.Schema(
+    {
+        RegNo: {
+            type: String,
+            required: [true, 'Register number is required'],
+            unique: true,
+            uppercase: true,
+            trim: true,
+            index: true,
+        },
+        StdName: {
+            type: String,
+            required: [true, 'Student name is required'],
+        },
+    },
+    {
+        timestamps: true,
+    }
+);
 
-	const studentSchema = new mongoose.Schema(
-		{
-			RegNo: { type: String, required: true },
-			StdName: { type: String, required: true },
-		},
-		{
-			timestamps: true,
-		}
-	);
+const Student = mongoose.model('Student', studentSchema);
 
-	// Create and return the model
-	return mongoose.model(modelName, studentSchema);
-};
-
-module.exports = createStudentCollection;
+module.exports = Student;
