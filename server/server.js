@@ -12,7 +12,8 @@ const { errorHandler } = require('./Middleware/errorMiddleware');
 const facultyRoutes = require('./Routes/facultyRoutes');
 const attendanceRoutes = require('./Routes/attendanceRoutes');
 const adminRoutes = require('./Routes/adminRoutes');
-const timetableRoutes = require('./Routes/timetableRoutes'); // Add this line
+const timetableRoutes = require('./Routes/timetableRoutes');
+const studentRoutes = require('./Routes/studentRoutes'); // Add this line
 
 // --- Initialization ---
 connectDB();
@@ -29,7 +30,8 @@ app.use(express.urlencoded({ extended: false }));
 app.use('/api/faculty', facultyRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/timetables', timetableRoutes); // Add this line
+app.use('/api/timetables', timetableRoutes);
+app.use('/api/students', studentRoutes); // Add this line
 
 // --- Centralized Error Handler ---
 app.use(errorHandler);

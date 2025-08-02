@@ -24,7 +24,7 @@ const AppHeader = () => {
 
 			<Menu.Divider />
 			<Menu.Item key="logout" icon={<LogoutOutlined />} onClick={handleLogout}>
-				Logout
+				LogOut
 			</Menu.Item>
 		</Menu>
 	);

@@ -1,32 +1,29 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-    Table,
-    Button,
-    message,
     Row,
     Col,
     Card,
     Select,
+    Button,
+    message,
+    Empty,
+    Table,
     Modal,
     Form,
     Input,
-    Spin,
-    Empty,
     Popconfirm,
 } from 'antd';
-import { DeleteOutlined, EditOutlined, UserAddOutlined, PlusOutlined } from '@ant-design/icons';
+import { EditOutlined, DeleteOutlined, UserAddOutlined, PlusOutlined } from '@ant-design/icons';
 import { url as backendUrl } from '../Backendurl';
 
 const EditData = () => {
     const [courses, setCourses] = useState([]);
     const [selectedCourse, setSelectedCourse] = useState(null);
     const [students, setStudents] = useState([]);
-
-    // Loading states
     const [isCoursesLoading, setIsCoursesLoading] = useState(true);
     const [isStudentsLoading, setIsStudentsLoading] = useState(false);
 
-    // Modal states
+    // Modal States
     const [isStudentModalVisible, setIsStudentModalVisible] = useState(false);
     const [isRepModalVisible, setIsRepModalVisible] = useState(false);
     const [editingStudent, setEditingStudent] = useState(null);
@@ -35,40 +32,47 @@ const EditData = () => {
     const [repForm] = Form.useForm();
 
     // --- Data Fetching ---
+    const fetchCourses = async () => {
+        setIsCoursesLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${backendUrl}/faculty/dashboard`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) throw new Error('Failed to fetch courses.');
+            const data = await response.json();
+            setCourses(data || []);
+        } catch (err) {
+            message.error(err.message || 'Failed to fetch courses.');
+        } finally {
+            setIsCoursesLoading(false);
+        }
+    };
 
-    // 1. Fetch the faculty's assigned courses on component mount
     useEffect(() => {
-        const fetchCourses = async () => {
-            try {
-                const token = localStorage.getItem('token');
-                // --- FIX: Calling the new, correct dashboard endpoint ---
-                const response = await fetch(`${backendUrl}/faculty/dashboard`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!response.ok) throw new Error('Failed to fetch courses.');
-                const data = await response.json();
-                setCourses(data || []);
-            } catch (err) {
-                message.error(err.message || 'Failed to fetch courses.');
-            } finally {
-                setIsCoursesLoading(false);
-            }
-        };
         fetchCourses();
         document.title = 'ATTENDANCE SYSTEM | EDIT DATA';
     }, []);
 
-    // 2. Fetch students whenever a course is selected
-    const fetchStudents = async (courseId) => {
-        if (!courseId) return;
+    const handleCourseChange = async (courseId) => {
+        if (!courseId) {
+            setSelectedCourse(null);
+            setStudents([]);
+            return;
+        }
+
+        const course = courses.find(c => c._id === courseId);
+        setSelectedCourse(course);
         setIsStudentsLoading(true);
+        setStudents([]);
+
         try {
             const token = localStorage.getItem('token');
-            // Using the new RESTful endpoint
             const response = await fetch(`${backendUrl}/faculty/courses/${courseId}/students`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            if (!response.ok) throw new Error('Failed to fetch students for this course.');
+            if (!response.ok)
+                throw new Error('Failed to fetch students.');
             const data = await response.json();
             setStudents(data);
         } catch (error) {
@@ -78,43 +82,67 @@ const EditData = () => {
         }
     };
 
-    // --- Modal Handling ---
-
+    // --- Modal Logic ---
     const showStudentModal = (student = null) => {
         setEditingStudent(student);
-        studentForm.setFieldsValue(student || { StdName: '', RegNo: '' });
+        studentForm.setFieldsValue(student || { RegNo: '', StdName: '' });
         setIsStudentModalVisible(true);
     };
 
+    const handleStudentModalCancel = () => {
+        setIsStudentModalVisible(false);
+        setEditingStudent(null);
+        studentForm.resetFields();
+    };
+
     const showRepModal = () => {
-        repForm.resetFields();
         setIsRepModalVisible(true);
     };
 
-    const handleCancel = () => {
-        setIsStudentModalVisible(false);
+    const handleRepModalCancel = () => {
         setIsRepModalVisible(false);
-        setEditingStudent(null);
+        repForm.resetFields();
     };
 
-    // --- API Operations (CRUD) ---
+    // --- API Operations ---
+    const handleStudentFormSubmit = async (values) => {
+        try {
+            const token = localStorage.getItem('token');
+            let response;
+            let successMessage;
 
-    // Add or Edit a Student
-    const handleStudentFormFinish = async (values) => {
-        // This functionality would require new dedicated endpoints.
-        // For now, we'll add a placeholder message.
-        message.info('Add/Edit student functionality to be implemented with new endpoints.');
-        handleCancel();
+            if (editingStudent) {
+                // Update existing student
+                response = await fetch(`${backendUrl}/students/${editingStudent._id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify(values),
+                });
+                successMessage = 'Student updated successfully!';
+            } else {
+                // Add new student
+                response = await fetch(`${backendUrl}/students`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ ...values, courseId: selectedCourse._id }),
+                });
+                successMessage = 'Student added successfully!';
+            }
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'An error occurred.');
+            }
+
+            message.success(successMessage);
+            handleStudentModalCancel();
+            handleCourseChange(selectedCourse._id); // Refresh student list
+        } catch (error) {
+            message.error(error.message);
+        }
     };
 
-    // Delete a Student
-    const handleDeleteStudent = async (studentId) => {
-        // This functionality would require a new dedicated endpoint.
-        message.info('Delete student functionality to be implemented with a new endpoint.');
-    };
-
-    // Add a Representative
-    const handleRepFormFinish = async (values) => {
+    const handleRepFormSubmit = async (values) => {
         try {
             const token = localStorage.getItem('token');
             const response = await fetch(`${backendUrl}/admin/representatives`, {
@@ -124,135 +152,150 @@ const EditData = () => {
             });
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.message);
+                throw new Error(errorData.message || 'Failed to add representative.');
             }
             message.success('Representative added successfully!');
-            handleCancel();
+            handleRepModalCancel();
         } catch (error) {
             message.error(error.message);
         }
     };
 
-    const columns = [
-        { title: 'Registration Number', dataIndex: 'RegNo', key: 'RegNo' },
-        { title: 'Name', dataIndex: 'StdName', key: 'StdName' },
+    const handleDeleteStudent = async (studentId) => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${backendUrl}/students/${studentId}/courses/${selectedCourse._id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to delete student.');
+            }
+            message.success('Student removed from course successfully.');
+            handleCourseChange(selectedCourse._id); // Refresh student list
+        } catch (error) {
+            message.error(error.message);
+        }
+    };
+
+    // --- Table Columns ---
+    const studentColumns = [
+        { title: 'Register Number', dataIndex: 'RegNo', key: 'RegNo' },
+        { title: 'Student Name', dataIndex: 'StdName', key: 'StdName' },
         {
             title: 'Actions',
             key: 'actions',
             render: (_, record) => (
-                <div className="flex gap-4">
+                <span className="space-x-2">
                     <Button icon={<EditOutlined />} onClick={() => showStudentModal(record)}>
                         Edit
                     </Button>
                     <Popconfirm
-                        title="Delete Student"
-                        description="Are you sure you want to delete this student?"
+                        title="Remove Student"
+                        description="Are you sure? This will remove the student from this course and their attendance records."
                         onConfirm={() => handleDeleteStudent(record._id)}
-                        okText="Yes, Delete"
-                        cancelText="Cancel"
+                        okText="Yes, Remove"
                         okButtonProps={{ danger: true }}
                     >
                         <Button danger icon={<DeleteOutlined />}>
-                            Delete
+                            Remove
                         </Button>
                     </Popconfirm>
-                </div>
+                </span>
             ),
         },
     ];
 
     return (
         <div className="p-6 bg-gray-50 min-h-screen">
-            <h1 className="text-2xl font-bold mb-6 text-gray-800">Manage Course Data</h1>
+            <h1 className="text-2xl font-bold mb-6 text-gray-800">Edit Data</h1>
 
             <Card className="shadow-md mb-6">
-                <Row gutter={[16, 16]} align="bottom">
+                <Row gutter={24}>
                     <Col xs={24} md={12}>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Select a Course to Manage</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Select a Course</label>
                         <Select
                             loading={isCoursesLoading}
                             className="w-full"
-                            placeholder="Select a course"
-                            value={selectedCourse?._id}
-                            onChange={(value) => {
-                                const course = courses.find(c => c._id === value);
-                                setSelectedCourse(course);
-                                fetchStudents(value);
-                            }}
-                            options={courses.map((course) => ({
+                            placeholder="Select a course to manage its data"
+                            onChange={handleCourseChange}
+                            options={courses.map(course => ({
                                 label: `${course.coursename} (${course.coursecode})`,
                                 value: course._id,
                             }))}
                         />
                     </Col>
-                    <Col xs={24} md={12}>
-                        {selectedCourse && (
-                            <div className="flex gap-2">
-                                <Button type="primary" icon={<UserAddOutlined />} onClick={() => showStudentModal()}>
-                                    Add Student
-                                </Button>
-                                <Button icon={<PlusOutlined />} onClick={showRepModal}>
-                                    Add Representative
-                                </Button>
-                            </div>
-                        )}
-                    </Col>
                 </Row>
             </Card>
 
-            <Card className="shadow-md">
-                <h2 className="text-xl font-semibold mb-4">
-                    {selectedCourse ? `Students in ${selectedCourse.coursecode}` : 'Select a course to see students'}
-                </h2>
-                {isStudentsLoading ? (
-                    <div className="text-center"><Spin size="large" /></div>
-                ) : students.length > 0 ? (
+            {selectedCourse && (
+                <Card className="shadow-md">
+                    <Row justify="space-between" align="middle" className="mb-4">
+                        <Col>
+                            <h2 className="text-xl font-semibold">
+                                Students in {selectedCourse.coursecode}
+                            </h2>
+                        </Col>
+                        <Col className="space-x-2">
+                            <Button type="default" icon={<UserAddOutlined />} onClick={showRepModal}>
+                                Add Representative
+                            </Button>
+                            <Button type="primary" icon={<PlusOutlined />} onClick={() => showStudentModal()}>
+                                Add Student
+                            </Button>
+                        </Col>
+                    </Row>
                     <Table
-                        columns={columns}
+                        columns={studentColumns}
                         dataSource={students}
                         rowKey="_id"
-                        pagination={{ pageSize: 10 }}
-                        scroll={{ x: 'max-content' }}
+                        loading={isStudentsLoading}
+                        locale={{ emptyText: <Empty description="No students found for this course." /> }}
                     />
-                ) : (
-                    <Empty description={selectedCourse ? 'No students found for this course.' : 'Please select a course.'} />
-                )}
-            </Card>
+                </Card>
+            )}
 
+            {/* Student Add/Edit Modal */}
             <Modal
-                title={editingStudent ? 'Edit Student' : 'Add New Student'}
+                title={editingStudent ? 'Edit Student' : 'Add Student'}
                 open={isStudentModalVisible}
-                onCancel={handleCancel}
+                onCancel={handleStudentModalCancel}
                 footer={null}
                 destroyOnClose
             >
-                <Form form={studentForm} layout="vertical" onFinish={handleStudentFormFinish}>
-                    <Form.Item label="Student Name" name="StdName" rules={[{ required: true }]}>
-                        <Input placeholder="Enter student's full name" />
+                <Form form={studentForm} layout="vertical" onFinish={handleStudentFormSubmit}>
+                    <Form.Item name="RegNo" label="Register Number" rules={[{ required: true }]}>
+                        <Input placeholder="Enter register number" />
                     </Form.Item>
-                    <Form.Item label="Registration Number" name="RegNo" rules={[{ required: true }]}>
-                        <Input placeholder="Enter student's registration number" />
+                    <Form.Item name="StdName" label="Student Name" rules={[{ required: true }]}>
+                        <Input placeholder="Enter student name" />
                     </Form.Item>
-                    <Form.Item className="text-right">
-                        <Button onClick={handleCancel} style={{ marginRight: 8 }}>Cancel</Button>
-                        <Button type="primary" htmlType="submit">
-                            {editingStudent ? 'Update' : 'Add'}
+                    <Form.Item>
+                        <Button type="primary" htmlType="submit" block>
+                            {editingStudent ? 'Save Changes' : 'Add Student'}
                         </Button>
                     </Form.Item>
                 </Form>
             </Modal>
 
-            <Modal title="Add New Representative" open={isRepModalVisible} onCancel={handleCancel} footer={null} destroyOnClose>
-                <Form form={repForm} layout="vertical" onFinish={handleRepFormFinish}>
-                    <Form.Item label="Username" name="username" rules={[{ required: true }]}>
+            {/* Representative Add Modal */}
+            <Modal
+                title="Add Representative"
+                open={isRepModalVisible}
+                onCancel={handleRepModalCancel}
+                footer={null}
+                destroyOnClose
+            >
+                <Form form={repForm} layout="vertical" onFinish={handleRepFormSubmit}>
+                    <Form.Item name="username" label="Username" rules={[{ required: true }]}>
                         <Input placeholder="Enter representative's username" />
                     </Form.Item>
-                    <Form.Item label="Password" name="password" rules={[{ required: true }]}>
+                    <Form.Item name="password" label="Password" rules={[{ required: true }]}>
                         <Input.Password placeholder="Enter a temporary password" />
                     </Form.Item>
-                    <Form.Item className="text-right">
-                        <Button onClick={handleCancel} style={{ marginRight: 8 }}>Cancel</Button>
-                        <Button type="primary" htmlType="submit">
+                    <Form.Item>
+                        <Button type="primary" htmlType="submit" block>
                             Add Representative
                         </Button>
                     </Form.Item>
