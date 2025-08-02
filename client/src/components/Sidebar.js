@@ -1,119 +1,110 @@
-import React, { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+// src/components/Sidebar.js
+import React, { useContext } from "react";
 import { Layout, Menu } from "antd";
 import {
-	PieChartOutlined,
-	CalendarOutlined,
+	UserOutlined,
 	DashboardOutlined,
-	MenuFoldOutlined,
-	MenuUnfoldOutlined,
+	BookOutlined,
+	TeamOutlined,
 	EditOutlined,
 	UnlockOutlined,
-	UserOutlined,
-	PlusOutlined,
+	CalendarOutlined,
+	ProfileOutlined
 } from "@ant-design/icons";
+import { Link, useLocation } from "react-router-dom";
+import { authContext } from "../context/authContext";
 
 const { Sider } = Layout;
 
-const Sidebar = ({ user }) => {
-	const [collapsed, setCollapsed] = useState(false);
+const Sidebar = () => {
+	const { user } = useContext(authContext);
 	const location = useLocation();
-	const [selectedKey, setSelectedKey] = useState(() => {
-		if (user?.role === "A") return "2";
-		return "1";
-	});
 
-	const handleMenuClick = (key) => {
-		setSelectedKey(key);
-	};
+	const getMenuItems = () => {
+		const items = [];
 
-	const toggleCollapsed = () => {
-		setCollapsed(!collapsed);
-	};
-
-	const items = [
-		{
-			key: "1",
-			icon: <CalendarOutlined />,
-			label: "Attendance",
-			path: "/attendance",
-		},
-	];
-
-	if (user?.role === "A") {
-		items.push(
-			{ key: "2", icon: <UserOutlined />, label: "Profile", path: "/profile" },
-			{
-				key: "3",
-				icon: <DashboardOutlined />,
-				label: "Dashboard",
-				path: "/dashboard",
-			},
-			{
-				key: "4",
-				icon: <PieChartOutlined />,
-				label: "Summary",
-				path: "/students",
-			},
-			{ key: "5", icon: <EditOutlined />, label: "Edit-Data", path: "/edit" },
-			{
-				key: "6",
-				icon: <UnlockOutlined />,
-				label: "Unlock Attendance",
-				path: "/unlock-attendance",
-			},
-			{
-				key: "7",
-				icon: <PlusOutlined />,
-				label: "Add Course",
-				path: "/register-faculty",
-			},
-
-			{
-				key: "8",
-				icon: <PlusOutlined />,
-				label: "Time Table",
-				path: "/time-table",
-			}
-		);
-	}
-
-	useEffect(() => {
-		const currentPath = location.pathname;
-		const currentItem = items.find((item) => item.path === currentPath);
-		if (currentItem) {
-			setSelectedKey(currentItem.key);
+		if (user) {
+			items.push({
+				key: 'profile',
+				icon: <UserOutlined />,
+				label: <Link to="/profile">Profile</Link>,
+			});
 		}
-	}, [location]);
+
+		if (user && user.role === "U") {
+			items.push({
+				key: 'attendance',
+				icon: <BookOutlined />,
+				label: <Link to="/attendance">Attendance</Link>,
+			});
+		}
+
+		if (user && user.role !== "U") {
+			items.push(
+				{
+					key: 'dashboard',
+					icon: <DashboardOutlined />,
+					label: <Link to="/dashboard">Dashboard</Link>,
+				},
+				{
+					key: 'attendance',
+					icon: <BookOutlined />,
+					label: <Link to="/attendance">Attendance</Link>,
+				},
+				{
+					key: 'students',
+					icon: <TeamOutlined />,
+					label: <Link to="/students">Students</Link>,
+				},
+				{
+					key: 'edit',
+					icon: <EditOutlined />,
+					label: <Link to="/edit">Edit Data</Link>,
+				},
+				{
+					key: 'unlock-attendance',
+					icon: <UnlockOutlined />,
+					label: <Link to="/unlock-attendance">Unlock Attendance</Link>,
+				},
+				{
+					key: 'time-table',
+					icon: <CalendarOutlined />,
+					label: <Link to="/time-table">Time Table</Link>,
+				},
+				{
+					key: 'register-faculty',
+					icon: <ProfileOutlined />,
+					label: <Link to="/register-faculty">Register Courses</Link>,
+				},
+			);
+		}
+
+		return items;
+	};
 
 	return (
 		<Sider
-			breakpoint="lg"
-			collapsedWidth="0"
-			onCollapse={(collapsed) => setCollapsed(collapsed)}
+			width={200} // Fixed width for the sidebar
+			className="site-layout-background"
+			style={{
+				overflow: 'auto',
+				height: '100vh',
+				position: 'fixed', // Fixed position
+				left: 0,
+				top: 0,
+				bottom: 0,
+				zIndex: 100, // Ensure sidebar is above other content if needed
+			}}
 		>
-			<div className="demo-logo-vertical" />
+			<div className="logo" style={{ height: '32px', margin: '16px', background: 'rgba(255, 255, 255, 0.2)', borderRadius: '6px' }} />
 			<Menu
 				theme="dark"
 				mode="inline"
-				selectedKeys={[selectedKey]}
-				className="sticky top-4"
-			>
-				{items.map((item) => (
-					<Menu.Item key={item.key} icon={item.icon}>
-						<Link to={item.path} onClick={() => handleMenuClick(item.key)}>
-							{item.label}
-						</Link>
-					</Menu.Item>
-				))}
-			</Menu>
-			<div
-				className="trigger"
-				onClick={toggleCollapsed}
-				style={{ textAlign: "center", margin: "10px 0" }}
-			>
-				{collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-			</div>
+				selectedKeys={[
+					location.pathname === '/' ? (user && user.role === 'A' ? 'profile' : 'attendance') : location.pathname.split('/')[1]
+				]}
+				items={getMenuItems()}
+			/>
 		</Sider>
 	);
 };

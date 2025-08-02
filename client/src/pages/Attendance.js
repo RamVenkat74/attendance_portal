@@ -3,10 +3,16 @@ import { Select, DatePicker, Button, message, Spin, Empty, Row, Col } from 'antd
 import dayjs from 'dayjs';
 import AttendanceTable from '../components/AttendanceTable';
 import { url as backendUrl } from '../Backendurl';
-import { AuthContext } from '../context/authContext';
+import { authContext } from '../context/authContext';
+
+// Helper to get the day of the week as a lowercase string (e.g., 'monday')
+const getDayOfWeek = (date) => {
+	const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+	return days[dayjs(date).day()];
+};
 
 const Attendance = () => {
-	const { user } = useContext(AuthContext);
+	const { user } = useContext(authContext);
 	const [facultyCourses, setFacultyCourses] = useState([]);
 	const [selectedCourse, setSelectedCourse] = useState(null);
 	const [selectedDate, setSelectedDate] = useState(dayjs());
@@ -16,6 +22,7 @@ const Attendance = () => {
 	const [isCoursesLoading, setIsCoursesLoading] = useState(true);
 	const [attendanceData, setAttendanceData] = useState(null);
 
+	// --- Fetch the faculty's assigned courses on component mount ---
 	useEffect(() => {
 		const fetchCourses = async () => {
 			try {
@@ -33,8 +40,43 @@ const Attendance = () => {
 			}
 		};
 		fetchCourses();
-		document.title = 'ATTENDANCE | MARK';
 	}, []);
+
+	// --- NEW: Effect to auto-select the hour based on the timetable ---
+	useEffect(() => {
+		const fetchTimetableAndSetHour = async () => {
+			if (!selectedCourse || !selectedDate) {
+				return;
+			}
+
+			// Reset hour when selection changes
+			setSelectedHour(null);
+
+			try {
+				const token = localStorage.getItem('token');
+				const response = await fetch(`${backendUrl}/timetables/${selectedCourse._id}`, {
+					headers: { Authorization: `Bearer ${token}` },
+				});
+
+				if (response.ok) {
+					const data = await response.json();
+					const dayOfWeek = getDayOfWeek(selectedDate);
+					const scheduledHours = data.timetable?.[dayOfWeek] || [];
+
+					// If there are scheduled hours for this day, default to the first one
+					if (scheduledHours.length > 0) {
+						setSelectedHour(scheduledHours[0]);
+					}
+				}
+				// If response is 404 (no timetable found), we just do nothing and let the user select manually.
+			} catch (error) {
+				console.error("Could not fetch timetable:", error);
+				// Don't show an error message, as this is an optional enhancement.
+			}
+		};
+
+		fetchTimetableAndSetHour();
+	}, [selectedCourse, selectedDate]); // This effect runs when the course or date changes
 
 	const handleFetchStudents = async () => {
 		if (!selectedCourse || !selectedDate || !selectedHour) {
@@ -85,13 +127,13 @@ const Attendance = () => {
 							<Select
 								className="w-full"
 								placeholder="Select a course"
-								value={selectedCourse ? selectedCourse.coursecode : undefined}
+								value={selectedCourse?._id}
 								onChange={(value) => {
-									const course = facultyCourses.find(c => c.coursecode === value);
+									const course = facultyCourses.find(c => c._id === value);
 									setSelectedCourse(course);
 								}}
 								options={facultyCourses.map(course => ({
-									value: course.coursecode,
+									value: course._id,
 									label: `${course.coursecode} - ${course.coursename}`,
 								}))}
 							/>

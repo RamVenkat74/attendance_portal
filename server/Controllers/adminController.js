@@ -33,9 +33,24 @@ const register = asyncHandler(async (req, res) => {
 });
 
 const auth = asyncHandler(async (req, res) => {
-    const { username, password } = req.body;
+    const { username, password, loginType } = req.body;
+
+    // --- FIX: Add a strict check for loginType ---
+    if (!loginType || !['Faculty', 'Representative'].includes(loginType)) {
+        res.status(400);
+        throw new Error('A valid login type (Faculty or Representative) is required.');
+    }
+
     const user = await Admin.findOne({ username });
+
     if (user && (await user.matchPassword(password))) {
+        const expectedRole = loginType === 'Faculty' ? 'A' : 'U';
+
+        if (user.role !== expectedRole) {
+            res.status(401);
+            throw new Error('Access denied. Please use the correct login portal for your role.');
+        }
+
         res.json({
             token: generateToken(user._id, user.username),
             user: { _id: user._id, username: user.username, role: user.role },
@@ -45,6 +60,7 @@ const auth = asyncHandler(async (req, res) => {
         throw new Error('Invalid username or password');
     }
 });
+
 
 const addRep = asyncHandler(async (req, res) => {
     const { username, password, coursecode } = req.body;

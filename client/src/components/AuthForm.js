@@ -2,24 +2,25 @@ import React, { useState, useContext } from 'react';
 import { Form, Input, Button, message } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { url as backendUrl } from '../Backendurl';
-import { AuthContext } from '../context/authContext';
+import { authContext } from '../context/authContext';
 
-const AuthForm = ({ isLogin }) => {
+// The form now accepts a 'loginType' prop ('Faculty' or 'Representative')
+const AuthForm = ({ isLogin, loginType }) => {
 	const [loading, setLoading] = useState(false);
 	const navigate = useNavigate();
-	const { login } = useContext(AuthContext);
+	const { login } = useContext(authContext);
 
 	const onFinish = async (values) => {
 		setLoading(true);
 		try {
-			// --- FIX: Using the new, correct API endpoint ---
 			const endpoint = isLogin ? '/admin/auth/login' : '/admin/auth/register';
 			const response = await fetch(`${backendUrl}${endpoint}`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
 				},
-				body: JSON.stringify(values),
+				// --- FIX: Send the loginType to the backend for verification ---
+				body: JSON.stringify({ ...values, loginType }),
 			});
 
 			const data = await response.json();
@@ -29,8 +30,8 @@ const AuthForm = ({ isLogin }) => {
 			}
 
 			message.success(`Welcome, ${data.user.username}!`);
-			login(data.user, data.token); // Use login function from context
-			navigate('/'); // Redirect to the main page
+			login(data.user, data.token);
+			navigate('/');
 		} catch (error) {
 			message.error(error.message);
 			console.error('Login/Register error:', error);

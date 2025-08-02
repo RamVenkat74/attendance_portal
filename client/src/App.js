@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext } from "react";
 import {
 	BrowserRouter as Router,
 	Route,
@@ -17,38 +17,30 @@ import UnlockAttendance from "./pages/UnlockAttendance";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import TimeTableVerify from "./pages/TimeTableVerify";
+import { authContext } from "./context/authContext"; // Import your authContext
 
 const App = () => {
-	const [auth, setAuth] = useState(false);
-	const [user, setUser] = useState({});
+	// Consume authentication state from your authContext
+	const { auth, user } = useContext(authContext);
 
-	useEffect(() => {
-		const token = localStorage.getItem("token");
-		const userDataString = localStorage.getItem("user");
-
-		if (token) {
-			setAuth(true);
-			if (userDataString) {
-				try {
-					const userData = JSON.parse(userDataString);
-					setUser(userData);
-				} catch (error) {
-					console.error("Error parsing user data:", error);
-					setUser({});
-				}
-			} else {
-				setUser({});
-			}
-		} else {
-			setAuth(false);
-		}
-	}, []);
+	// Show a loading indicator while the authentication status is being determined
+	// Your AuthContext uses 'auth === null' to indicate loading
+	if (auth === null) {
+		return <div className="flex items-center justify-center min-h-screen text-lg">Loading application...</div>;
+	}
 
 	const getDefaultPage = () => {
+		// Ensure user object is available before accessing its role property
+		if (!user) {
+			// This case should ideally be handled by the 'auth ? <Navigate to="/auth" />'
+			// but as a fallback, if auth is true but user is somehow null
+			return <Navigate to="/auth" />;
+		}
+		// Assuming 'A' is for Admin/Faculty and 'U' for regular user
 		return user.role === "A" ? (
-			<Profile setAuth={setAuth} user={user} />
+			<Profile />
 		) : (
-			<Attendance setAuth={setAuth} user={user} />
+			<Attendance />
 		);
 	};
 
@@ -59,25 +51,26 @@ const App = () => {
 				<Route
 					path="/auth"
 					element={
-						auth ? (
+						auth ? ( // Use 'auth' state from context
 							<Navigate to="/" />
 						) : (
-							<Auth setAuth={setAuth} setUser={setUser} />
+							<Auth /> // Auth component will handle setting context state on success
 						)
 					}
 				/>
 				<Route
 					path="/register"
-					element={<SignUp setAuth={setAuth} setUser={setUser} />}
+					element={<SignUp />} // SignUp component will handle setting context state on success
 				/>
-				{/* Register Faculty Route */}
 
-				{/* Main Application Routes */}
+				{/* Main Application Routes - Protected */}
 				<Route
 					path="/"
 					element={
-						auth ? (
-							<HomeLayout setAuth={setAuth} user={user} />
+						auth ? ( // Use 'auth' state from context
+							// HomeLayout now receives user as a prop, if it needs it directly.
+							// Otherwise, HomeLayout's children can consume authContext themselves.
+							<HomeLayout user={user} />
 						) : (
 							<Navigate to="/auth" />
 						)
@@ -87,95 +80,96 @@ const App = () => {
 					<Route
 						index
 						element={
-							user.role === "U" ? (
-								<Attendance setAuth={setAuth} user={user} />
+							auth && user ? ( // Ensure auth is true AND user is not null before checking role
+								user.role === "U" ? (
+									<Attendance />
+								) : (
+									getDefaultPage()
+								)
 							) : (
-								getDefaultPage()
+								<Navigate to="/auth" /> // Fallback if auth is true but user is null (shouldn't happen with proper context)
 							)
 						}
 					/>
 
+					{/* Protected routes for Admin/Faculty (user.role !== "U") */}
 					<Route
-						path="/register-faculty"
+						path="register-faculty"
 						element={
-							user.role === "U" ? (
-								<Navigate to="/404" />
+							auth && user && user.role !== "U" ? ( // Check auth, user, and role
+								<RegisterFaculty />
 							) : (
-								<RegisterFaculty setAuth={setAuth} user={user} />
+								<Navigate to="/404" />
 							)
 						}
 					/>
-					{/* Dashboard Route */}
 					<Route
 						path="dashboard"
 						element={
-							user.role === "U" ? (
-								<Navigate to="/404" />
+							auth && user && user.role !== "U" ? ( // Check auth, user, and role
+								<Dashboard />
 							) : (
-								<Dashboard setAuth={setAuth} user={user} />
+								<Navigate to="/404" />
 							)
 						}
 					/>
 					<Route
 						path="attendance"
-						element={<Attendance setAuth={setAuth} user={user} />}
+						element={auth ? <Attendance /> : <Navigate to="/auth" />} // Only check auth, as all users might access this
 					/>
 					<Route
 						path="profile"
 						element={
-							user.role === "U" ? (
-								<Navigate to="/404" />
+							auth && user && user.role !== "U" ? ( // Check auth, user, and role
+								<Profile />
 							) : (
-								<Profile setAuth={setAuth} user={user} />
+								<Navigate to="/404" />
 							)
 						}
 					/>
-
-					{/* Students Route */}
 					<Route
 						path="students"
 						element={
-							user.role === "U" ? (
-								<Navigate to="/404" />
+							auth && user && user.role !== "U" ? ( // Check auth, user, and role
+								<Students />
 							) : (
-								<Students setAuth={setAuth} user={user} />
+								<Navigate to="/404" />
 							)
 						}
 					/>
 					<Route
 						path="edit"
 						element={
-							user.role === "U" ? (
-								<Navigate to="/404" />
+							auth && user && user.role !== "U" ? ( // Check auth, user, and role
+								<EditData />
 							) : (
-								<EditData setAuth={setAuth} user={user} />
+								<Navigate to="/404" />
 							)
 						}
 					/>
 					<Route
 						path="time-table"
 						element={
-							user.role === "U" ? (
-								<Navigate to="/404" />
+							auth && user && user.role !== "U" ? ( // Check auth, user, and role
+								<TimeTableVerify />
 							) : (
-								<TimeTableVerify setAuth={setAuth} user={user} />
+								<Navigate to="/404" />
 							)
 						}
 					/>
 					<Route
 						path="unlock-attendance"
 						element={
-							user.role === "U" ? (
-								<Navigate to="/404" />
+							auth && user && user.role !== "U" ? ( // Check auth, user, and role
+								<UnlockAttendance />
 							) : (
-								<UnlockAttendance setAuth={setAuth} user={user} />
+								<Navigate to="/404" />
 							)
 						}
 					/>
-
-					{/* 404 Route */}
 				</Route>
-				<Route path="404" element={<NotFound />} />
+				{/* 404 Route */}
+				<Route path="/404" element={<NotFound />} />
 				{/* Redirect any unknown routes to 404 */}
 				<Route path="*" element={<Navigate to="/404" />} />
 			</Routes>

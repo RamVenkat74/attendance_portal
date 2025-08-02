@@ -1,9 +1,10 @@
+// src/context/authContext.js
 import React, { createContext, useState, useEffect } from 'react';
 
-export const AuthContext = createContext(null);
+export const authContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-    const [auth, setAuth] = useState(null);
+    const [auth, setAuth] = useState(null); // null indicates loading/initial check
     const [user, setUser] = useState(null);
 
     useEffect(() => {
@@ -14,15 +15,16 @@ export const AuthProvider = ({ children }) => {
             try {
                 const userData = JSON.parse(userDataString);
                 setUser(userData);
-                setAuth(true);
+                setAuth(true); // Set to true if token and user data exist
             } catch (error) {
+                console.error("Error parsing user data from localStorage:", error);
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
-                setAuth(false);
+                setAuth(false); // Set to false if data is invalid
                 setUser(null);
             }
         } else {
-            setAuth(false);
+            setAuth(false); // Set to false if no token or user data
         }
     }, []);
 
@@ -42,14 +44,13 @@ export const AuthProvider = ({ children }) => {
 
     const value = { user, auth, login, logout };
 
-    // Don't render the app until the auth status has been determined
     if (auth === null) {
-        return <div className="flex justify-center items-center h-screen">Loading...</div>; // Or a spinner component
+        return <div className="flex justify-center items-center h-screen text-lg">Loading application...</div>;
     }
 
     return (
-        <AuthContext.Provider value={value}>
+        <authContext.Provider value={value}>
             {children}
-        </AuthContext.Provider>
+        </authContext.Provider>
     );
 };

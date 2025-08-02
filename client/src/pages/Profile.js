@@ -18,14 +18,14 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { UserOutlined, TeamOutlined, HourglassOutlined, DeleteOutlined } from '@ant-design/icons';
 // --- FIX: Corrected the import path to match your lowercase filename ---
-import { AuthContext } from '../context/authContext';
+import { authContext } from '../context/authContext';
 import { url as backendUrl } from '../Backendurl';
 
 const { Title, Text } = Typography;
 const { Panel } = Collapse;
 
 const Profile = () => {
-	const { user, logout } = useContext(AuthContext);
+	const { user, logout } = useContext(authContext);
 	const [dashboardData, setDashboardData] = useState([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const navigate = useNavigate();
