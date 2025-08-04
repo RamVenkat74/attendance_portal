@@ -8,7 +8,8 @@ const {
 	getRecordsByCourse,
 	unlockRecord,
 	deleteRecordById,
-	getClassReport
+	getClassReport,
+	getMasterReport
 } = require('../Controllers/AttendanceController');
 
 const router = Router();
@@ -26,5 +27,7 @@ router.post('/data', fetchData);
 router.post('/dashboard', studentDashboard);
 router.post('/reports/class', getClassReport);
 router.post('/unmarked', unmarkedAttendanceHours);
+router.post('/reports/master', getMasterReport);
+
 
 module.exports = router;

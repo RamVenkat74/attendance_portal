@@ -1,109 +1,111 @@
-// src/components/Sidebar.js
-import React, { useContext } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { Layout, Menu } from "antd";
 import {
 	UserOutlined,
 	DashboardOutlined,
-	BookOutlined,
-	TeamOutlined,
+	SolutionOutlined,
 	EditOutlined,
 	UnlockOutlined,
-	CalendarOutlined,
-	ProfileOutlined
+	PlusOutlined,
+	TableOutlined,
+	FileDoneOutlined,
+	BarChartOutlined,
 } from "@ant-design/icons";
-import { Link, useLocation } from "react-router-dom";
-import { authContext } from "../context/authContext";
+import { useNavigate, useLocation } from "react-router-dom";
+import { authContext } from "../context/authContext"; // Import AuthContext
 
 const { Sider } = Layout;
 
 const Sidebar = () => {
-	const { user } = useContext(authContext);
+	const { user } = useContext(authContext); // Get user from context
+	const navigate = useNavigate();
 	const location = useLocation();
+	const [selectedKey, setSelectedKey] = useState(location.pathname.substr(1));
 
-	const getMenuItems = () => {
-		const items = [];
+	useEffect(() => {
+		// This keeps the correct menu item highlighted when the route changes
+		setSelectedKey(location.pathname.substr(1) || "attendance");
+	}, [location]);
 
-		if (user) {
-			items.push({
-				key: 'profile',
-				icon: <UserOutlined />,
-				label: <Link to="/profile">Profile</Link>,
-			});
-		}
-
-		if (user && user.role === "U") {
-			items.push({
-				key: 'attendance',
-				icon: <BookOutlined />,
-				label: <Link to="/attendance">Attendance</Link>,
-			});
-		}
-
-		if (user && user.role !== "U") {
-			items.push(
-				{
-					key: 'dashboard',
-					icon: <DashboardOutlined />,
-					label: <Link to="/dashboard">Dashboard</Link>,
-				},
-				{
-					key: 'attendance',
-					icon: <BookOutlined />,
-					label: <Link to="/attendance">Attendance</Link>,
-				},
-				{
-					key: 'students',
-					icon: <TeamOutlined />,
-					label: <Link to="/students">Students</Link>,
-				},
-				{
-					key: 'edit',
-					icon: <EditOutlined />,
-					label: <Link to="/edit">Edit Data</Link>,
-				},
-				{
-					key: 'unlock-attendance',
-					icon: <UnlockOutlined />,
-					label: <Link to="/unlock-attendance">Unlock Attendance</Link>,
-				},
-				{
-					key: 'time-table',
-					icon: <CalendarOutlined />,
-					label: <Link to="/time-table">Time Table</Link>,
-				},
-				{
-					key: 'register-faculty',
-					icon: <ProfileOutlined />,
-					label: <Link to="/register-faculty">Register Courses</Link>,
-				},
-			);
-		}
-
-		return items;
+	const handleMenuClick = (e) => {
+		// This function handles the navigation when a menu item is clicked
+		navigate(`/${e.key}`);
 	};
+
+	// This defines all the navigation items in the sidebar
+	const items = [
+		{
+			key: "attendance",
+			icon: <SolutionOutlined />,
+			label: "Attendance",
+		},
+		// --- FIX: Conditionally render admin-only items based on user role ---
+		...(user?.role === "A"
+			? [
+				{
+					key: "profile",
+					icon: <UserOutlined />,
+					label: "Profile",
+				},
+				{
+					key: "dashboard",
+					icon: <DashboardOutlined />,
+					label: "Dashboard",
+				},
+				{
+					key: "students", // This is the "Summary" page
+					icon: <BarChartOutlined />,
+					label: "Summary",
+				},
+				{
+					key: "master-report",
+					icon: <FileDoneOutlined />,
+					label: "Master Report",
+				},
+				{
+					key: "edit-data",
+					icon: <EditOutlined />,
+					label: "Edit Data",
+				},
+				{
+					key: "unlock-attendance",
+					icon: <UnlockOutlined />,
+					label: "Unlock Attendance",
+				},
+				{
+					key: "register-faculty",
+					icon: <PlusOutlined />,
+					label: "Add Course",
+				},
+				{
+					key: "time-table",
+					icon: <TableOutlined />,
+					label: "Time Table",
+				},
+			]
+			: []),
+	];
 
 	return (
 		<Sider
-			width={200} // Fixed width for the sidebar
-			className="site-layout-background"
+			breakpoint="lg"
+			collapsedWidth="0"
 			style={{
-				overflow: 'auto',
-				height: '100vh',
-				position: 'fixed', // Fixed position
+				height: "100vh",
+				position: "fixed",
 				left: 0,
 				top: 0,
 				bottom: 0,
-				zIndex: 100, // Ensure sidebar is above other content if needed
+				zIndex: 1000,
 			}}
 		>
-			<div className="logo" style={{ height: '32px', margin: '16px', background: 'rgba(255, 255, 255, 0.2)', borderRadius: '6px' }} />
+			<div className="demo-logo-vertical" />
 			<Menu
 				theme="dark"
 				mode="inline"
-				selectedKeys={[
-					location.pathname === '/' ? (user && user.role === 'A' ? 'profile' : 'attendance') : location.pathname.split('/')[1]
-				]}
-				items={getMenuItems()}
+				selectedKeys={[selectedKey]}
+				onClick={handleMenuClick}
+				items={items}
 			/>
 		</Sider>
 	);

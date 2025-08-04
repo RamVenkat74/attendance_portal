@@ -17,6 +17,8 @@ import UnlockAttendance from "./pages/UnlockAttendance";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import TimeTableVerify from "./pages/TimeTableVerify";
+import MasterReport from "./pages/MasterReport";
+
 import { authContext } from "./context/authContext"; // Import your authContext
 
 const App = () => {
@@ -138,7 +140,7 @@ const App = () => {
 						}
 					/>
 					<Route
-						path="edit"
+						path="edit-data"
 						element={
 							auth && user && user.role !== "U" ? ( // Check auth, user, and role
 								<EditData />
@@ -167,6 +169,8 @@ const App = () => {
 							)
 						}
 					/>
+					<Route path="master-report" element={<MasterReport />} />
+
 				</Route>
 				{/* 404 Route */}
 				<Route path="/404" element={<NotFound />} />

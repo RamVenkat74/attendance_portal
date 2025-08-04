@@ -220,6 +220,79 @@ const getClassReport = asyncHandler(async (req, res) => {
 	}
 	res.status(200).json(result);
 });
+const getMasterReport = asyncHandler(async (req, res) => {
+	const { dept, class: courseClass, startDate, endDate } = req.body;
+
+	if (!dept || !courseClass || !startDate || !endDate) {
+		res.status(400);
+		throw new Error('Department, class, and a date range are required.');
+	}
+
+	// 1. Find all courses for the given department and class to identify the students
+	const coursesInClass = await Course.find({ dept, class: courseClass }).populate('students');
+	if (coursesInClass.length === 0) {
+		res.status(404);
+		throw new Error('No courses found for the selected department and class.');
+	}
+
+	// 2. Create a unique set of all student IDs in that class
+	const studentIds = [...new Set(coursesInClass.flatMap(course => course.students.map(s => s._id)))];
+
+	// 3. Aggregate all attendance records for these students within the date range
+	const masterReport = await Report.aggregate([
+		// Stage 1: Match all reports within the date range that contain any of our target students
+		{
+			$match: {
+				date: { $gte: new Date(startDate), $lte: new Date(endDate) },
+				'attendance.student': { $in: studentIds },
+				freeze: true,
+			}
+		},
+		// Stage 2: Unwind the attendance array to process each entry individually
+		{ $unwind: '$attendance' },
+		// Stage 3: Filter again to ensure we only have entries for our target students
+		{ $match: { 'attendance.student': { $in: studentIds } } },
+		// Stage 4: Group by student to calculate their total present and conducted hours
+		{
+			$group: {
+				_id: '$attendance.student',
+				totalPresent: { $sum: { $cond: [{ $in: ['$attendance.status', [1, 2]] }, 1, 0] } },
+				totalConducted: { $sum: 1 },
+			}
+		},
+		// Stage 5: Join with the students collection to get their names and register numbers
+		{
+			$lookup: {
+				from: 'students',
+				localField: '_id',
+				foreignField: '_id',
+				as: 'studentInfo'
+			}
+		},
+		{ $unwind: '$studentInfo' },
+		// Stage 6: Project the final, clean data structure
+		{
+			$project: {
+				_id: 0,
+				RegNo: '$studentInfo.RegNo',
+				name: '$studentInfo.StdName',
+				totalPresent: '$totalPresent',
+				totalConducted: '$totalConducted',
+				percentage: {
+					$cond: [
+						{ $eq: ['$totalConducted', 0] },
+						0,
+						{ $round: [{ $multiply: [{ $divide: ['$totalPresent', '$totalConducted'] }, 100] }, 2] }
+					]
+				}
+			}
+		},
+		// Stage 7: Sort by Register Number
+		{ $sort: { RegNo: 1 } }
+	]);
+
+	res.status(200).json(masterReport);
+});
 
 module.exports = {
 	updateAttendance,
@@ -230,4 +303,5 @@ module.exports = {
 	unlockRecord,
 	deleteRecordById,
 	getClassReport, // This is now correctly exported
+	getMasterReport
 };

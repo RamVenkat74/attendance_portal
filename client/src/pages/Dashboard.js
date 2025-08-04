@@ -214,7 +214,7 @@ const Dashboard = () => {
                 </div>
             )}
 
-            {/* Show an Empty state if there's no data and we are not loading */}
+
             {!studentData && !isLoading && (
                 <Card className="mt-6 text-center shadow-md">
                     <Empty description="No report generated. Please fill out the form above." />
