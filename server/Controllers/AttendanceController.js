@@ -44,17 +44,48 @@ const updateAttendance = asyncHandler(async (req, res) => {
 });
 
 const fetchData = asyncHandler(async (req, res) => {
-	const { date, coursecode, hr } = req.body;
+	const { date, coursecode, hr, batch } = req.body;
+
 	if (!date || !coursecode || !hr || !Array.isArray(hr) || hr.length === 0) {
 		res.status(400);
 		throw new Error('Date, course code, and hour(s) are required.');
 	}
+
+	// Fetch students without sorting them in the database query yet
 	const course = await Course.findOne({ coursecode }).populate('students', 'RegNo StdName');
+
 	if (!course || !course.students || course.students.length === 0) {
 		res.status(404);
-		throw new Error('No students found for this course.');
+		throw new Error('No students found for the selected course.');
 	}
-	const students = course.students;
+
+	let studentsForSession = [...course.students];
+
+	// --- NEW CUSTOM SORTING LOGIC ---
+	// This sorts students based on the last 3 digits of their RegNo, like a roll call.
+	studentsForSession.sort((a, b) => {
+		const rollNoA = a.RegNo.slice(-3);
+		const rollNoB = b.RegNo.slice(-3);
+		return rollNoA.localeCompare(rollNoB);
+	});
+	// --- END OF NEW SORTING LOGIC ---
+
+
+	// --- CORRECTED BATCH SLICING LOGIC ---
+	// This now slices the correctly sorted list, mixing boys and girls as intended.
+	const BATCH1_SIZE = 34;
+	const BATCH2_SIZE = 34;
+	const isLabCourse = ['22SPC516', '22SEE501'].includes(coursecode);
+
+	if (isLabCourse && batch) {
+		if (batch === 1) {
+			studentsForSession = studentsForSession.slice(0, BATCH1_SIZE);
+		} else if (batch === 2) {
+			studentsForSession = studentsForSession.slice(BATCH2_SIZE);
+		}
+	}
+	// --- END OF BATCH LOGIC ---
+
 	const existingReport = await Report.findOne({
 		course: course._id,
 		date: date,
@@ -68,28 +99,36 @@ const fetchData = asyncHandler(async (req, res) => {
 	if (existingReport) {
 		isExpired = existingReport.isExpired;
 		freeze = existingReport.freeze;
-		const attendanceMap = new Map(existingReport.attendance.map(att => [att.student.RegNo, att.status]));
-		finalAttendanceData = students.map(student => ({
+		const attendanceMap = new Map(
+			existingReport.attendance.map(att => [att.student.RegNo, att.status])
+		);
+
+		finalAttendanceData = studentsForSession.map(student => ({
 			RegNo: student.RegNo,
 			Name: student.StdName,
 			status: attendanceMap.get(student.RegNo) || 1,
 		}));
 	} else {
-		finalAttendanceData = students.map(student => ({
+		finalAttendanceData = studentsForSession.map(student => ({
 			RegNo: student.RegNo,
 			Name: student.StdName,
 			status: 1,
 		}));
 	}
+
 	const absentees = finalAttendanceData.filter(s => s.status === -1).length;
+
 	res.status(200).json({
 		reports: finalAttendanceData,
-		count: students.length,
+		count: studentsForSession.length,
 		absentees,
 		isExpired,
 		freeze,
 	});
 });
+
+
+
 
 const studentDashboard = asyncHandler(async (req, res) => {
 	const { RegNo, startDate, endDate, coursecode } = req.body;
@@ -199,10 +238,14 @@ const getClassReport = asyncHandler(async (req, res) => {
 		res.status(404);
 		throw new Error('Course not found or no students enrolled.');
 	}
+
+	// Custom sort in JavaScript
+	course.students.sort((a, b) => a.RegNo.slice(-3).localeCompare(b.RegNo.slice(-3)));
 	const studentIds = course.students.map(s => s._id);
+
+	// The rest of the aggregation remains the same
 	const result = await Report.aggregate([
 		{ $match: { course: course._id, date: { $gte: new Date(startDate), $lte: new Date(endDate) }, freeze: true } },
-		{ $sort: { date: 1, hr: 1 } },
 		{ $unwind: '$attendance' },
 		{ $group: { _id: '$attendance.student', present: { $sum: { $cond: [{ $in: ['$attendance.status', [1, 2]] }, 1, 0] } }, totalHours: { $sum: 1 }, statuses: { $push: { date: '$date', hour: '$hr', status: '$attendance.status' } } } },
 		{ $group: { _id: null, allStudents: { $push: '$$ROOT' } } },
@@ -211,85 +254,39 @@ const getClassReport = asyncHandler(async (req, res) => {
 		{ $replaceRoot: { newRoot: '$data' } },
 		{ $lookup: { from: 'students', localField: 'student', foreignField: '_id', as: 'studentDetails' } },
 		{ $unwind: '$studentDetails' },
-		{ $project: { _id: 0, RegNo: '$studentDetails.RegNo', name: '$studentDetails.StdName', courses: [{ present: '$present', totalHours: '$totalHours', statuses: '$statuses' }] } },
-		{ $sort: { RegNo: 1 } }
+		{ $project: { _id: 0, RegNo: '$studentDetails.RegNo', name: '$studentDetails.StdName', courses: [{ present: '$present', totalHours: '$totalHours', statuses: '$statuses' }] } }
 	]);
-	if (result.length === 0) {
-		const studentList = course.students.map(s => ({ RegNo: s.RegNo, name: s.StdName, courses: [{ present: 0, totalHours: 0, statuses: [] }] }));
-		return res.status(200).json(studentList);
-	}
+
+	// Final sort in JavaScript to ensure order
+	result.sort((a, b) => a.RegNo.slice(-3).localeCompare(b.RegNo.slice(-3)));
+
 	res.status(200).json(result);
 });
 const getMasterReport = asyncHandler(async (req, res) => {
 	const { dept, class: courseClass, startDate, endDate } = req.body;
-
 	if (!dept || !courseClass || !startDate || !endDate) {
 		res.status(400);
 		throw new Error('Department, class, and a date range are required.');
 	}
-
-	// 1. Find all courses for the given department and class to identify the students
 	const coursesInClass = await Course.find({ dept, class: courseClass }).populate('students');
 	if (coursesInClass.length === 0) {
 		res.status(404);
 		throw new Error('No courses found for the selected department and class.');
 	}
-
-	// 2. Create a unique set of all student IDs in that class
 	const studentIds = [...new Set(coursesInClass.flatMap(course => course.students.map(s => s._id)))];
 
-	// 3. Aggregate all attendance records for these students within the date range
 	const masterReport = await Report.aggregate([
-		// Stage 1: Match all reports within the date range that contain any of our target students
-		{
-			$match: {
-				date: { $gte: new Date(startDate), $lte: new Date(endDate) },
-				'attendance.student': { $in: studentIds },
-				freeze: true,
-			}
-		},
-		// Stage 2: Unwind the attendance array to process each entry individually
+		{ $match: { date: { $gte: new Date(startDate), $lte: new Date(endDate) }, 'attendance.student': { $in: studentIds }, freeze: true } },
 		{ $unwind: '$attendance' },
-		// Stage 3: Filter again to ensure we only have entries for our target students
 		{ $match: { 'attendance.student': { $in: studentIds } } },
-		// Stage 4: Group by student to calculate their total present and conducted hours
-		{
-			$group: {
-				_id: '$attendance.student',
-				totalPresent: { $sum: { $cond: [{ $in: ['$attendance.status', [1, 2]] }, 1, 0] } },
-				totalConducted: { $sum: 1 },
-			}
-		},
-		// Stage 5: Join with the students collection to get their names and register numbers
-		{
-			$lookup: {
-				from: 'students',
-				localField: '_id',
-				foreignField: '_id',
-				as: 'studentInfo'
-			}
-		},
+		{ $group: { _id: '$attendance.student', totalPresent: { $sum: { $cond: [{ $in: ['$attendance.status', [1, 2]] }, 1, 0] } }, totalConducted: { $sum: 1 } } },
+		{ $lookup: { from: 'students', localField: '_id', foreignField: '_id', as: 'studentInfo' } },
 		{ $unwind: '$studentInfo' },
-		// Stage 6: Project the final, clean data structure
-		{
-			$project: {
-				_id: 0,
-				RegNo: '$studentInfo.RegNo',
-				name: '$studentInfo.StdName',
-				totalPresent: '$totalPresent',
-				totalConducted: '$totalConducted',
-				percentage: {
-					$cond: [
-						{ $eq: ['$totalConducted', 0] },
-						0,
-						{ $round: [{ $multiply: [{ $divide: ['$totalPresent', '$totalConducted'] }, 100] }, 2] }
-					]
-				}
-			}
-		},
-		// Stage 7: Sort by Register Number
-		{ $sort: { RegNo: 1 } }
+		{ $project: { _id: 0, RegNo: '$studentInfo.RegNo', name: '$studentInfo.StdName', totalPresent: '$totalPresent', totalConducted: '$totalConducted' } },
 	]);
+
+	// Final sort in JavaScript to ensure order
+	masterReport.sort((a, b) => a.RegNo.slice(-3).localeCompare(b.RegNo.slice(-3)));
 
 	res.status(200).json(masterReport);
 });

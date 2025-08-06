@@ -92,11 +92,20 @@ const createCourseWithStudents = asyncHandler(async (req, res) => {
 
 const getCourseStudents = asyncHandler(async (req, res) => {
     const course = await Course.findById(req.params.id).populate('students', 'RegNo StdName');
+
     if (!course) {
         res.status(404);
         throw new Error('Course not found');
     }
-    res.status(200).json(course.students);
+
+    // --- FIX: Apply custom roll call sorting ---
+    const sortedStudents = [...course.students].sort((a, b) => {
+        const rollNoA = a.RegNo.slice(-3);
+        const rollNoB = b.RegNo.slice(-3);
+        return rollNoA.localeCompare(rollNoB);
+    });
+
+    res.status(200).json(sortedStudents);
 });
 
 const deleteCourse = asyncHandler(async (req, res) => {
