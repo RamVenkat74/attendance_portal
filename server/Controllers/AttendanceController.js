@@ -268,29 +268,54 @@ const getMasterReport = asyncHandler(async (req, res) => {
 		res.status(400);
 		throw new Error('Department, class, and a date range are required.');
 	}
-	const coursesInClass = await Course.find({ dept, class: courseClass }).populate('students');
+
+	// 1. Find all courses for the class to get the complete student list
+	const coursesInClass = await Course.find({ dept, class: courseClass }).populate('students', 'RegNo StdName');
 	if (coursesInClass.length === 0) {
 		res.status(404);
 		throw new Error('No courses found for the selected department and class.');
 	}
-	const studentIds = [...new Set(coursesInClass.flatMap(course => course.students.map(s => s._id)))];
 
-	const masterReport = await Report.aggregate([
+	// 2. Create a unique, master list of all students in that class
+	const allStudentsInClass = coursesInClass.flatMap(course => course.students);
+	const studentMap = new Map(allStudentsInClass.map(s => [s._id.toString(), s]));
+	const uniqueStudents = Array.from(studentMap.values());
+	const studentIds = uniqueStudents.map(s => s._id);
+
+	if (studentIds.length === 0) {
+		return res.status(200).json([]); // Return empty if no students
+	}
+
+	// 3. Aggregate attendance data ONLY for the students who have records
+	const reportData = await Report.aggregate([
 		{ $match: { date: { $gte: new Date(startDate), $lte: new Date(endDate) }, 'attendance.student': { $in: studentIds }, freeze: true } },
 		{ $unwind: '$attendance' },
 		{ $match: { 'attendance.student': { $in: studentIds } } },
 		{ $group: { _id: '$attendance.student', totalPresent: { $sum: { $cond: [{ $in: ['$attendance.status', [1, 2]] }, 1, 0] } }, totalConducted: { $sum: 1 } } },
-		{ $lookup: { from: 'students', localField: '_id', foreignField: '_id', as: 'studentInfo' } },
-		{ $unwind: '$studentInfo' },
-		{ $project: { _id: 0, RegNo: '$studentInfo.RegNo', name: '$studentInfo.StdName', totalPresent: '$totalPresent', totalConducted: '$totalConducted' } },
 	]);
 
-	// Final sort in JavaScript to ensure order
-	masterReport.sort((a, b) => a.RegNo.slice(-3).localeCompare(b.RegNo.slice(-3)));
+	// 4. Merge the master student list with the attendance data
+	const reportMap = new Map(reportData.map(r => [r._id.toString(), r]));
 
-	res.status(200).json(masterReport);
+	const finalReport = uniqueStudents.map(student => {
+		const report = reportMap.get(student._id.toString());
+		const totalPresent = report ? report.totalPresent : 0;
+		const totalConducted = report ? report.totalConducted : 0;
+
+		return {
+			RegNo: student.RegNo,
+			name: student.StdName,
+			totalPresent,
+			totalConducted,
+			percentage: totalConducted > 0 ? parseFloat(((totalPresent / totalConducted) * 100).toFixed(2)) : 0,
+		};
+	});
+
+	// 5. Apply the final roll call sort
+	finalReport.sort((a, b) => a.RegNo.slice(-3).localeCompare(b.RegNo.slice(-3)));
+
+	res.status(200).json(finalReport);
 });
-
 module.exports = {
 	updateAttendance,
 	fetchData,
@@ -299,6 +324,6 @@ module.exports = {
 	getRecordsByCourse,
 	unlockRecord,
 	deleteRecordById,
-	getClassReport, // This is now correctly exported
+	getClassReport,
 	getMasterReport
 };
