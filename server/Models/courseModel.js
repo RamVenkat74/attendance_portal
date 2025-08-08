@@ -1,3 +1,5 @@
+// server/Models/courseModel.js
+
 const mongoose = require('mongoose');
 
 const courseSchema = new mongoose.Schema(
@@ -27,6 +29,16 @@ const courseSchema = new mongoose.Schema(
             type: String,
             required: true,
         },
+        // --- NEW FIELD ---
+        isLab: {
+            type: Boolean,
+            default: false,
+        },
+        // --- NEW FIELDS for batch-specific students ---
+        batch1Students: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
+        batch2Students: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
+
+        // This will now store ALL students from both batches for a lab course
         students: [
             {
                 type: mongoose.Schema.Types.ObjectId,

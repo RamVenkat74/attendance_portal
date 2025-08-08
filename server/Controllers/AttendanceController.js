@@ -51,40 +51,54 @@ const fetchData = asyncHandler(async (req, res) => {
 		throw new Error('Date, course code, and hour(s) are required.');
 	}
 
-	// Fetch students without sorting them in the database query yet
+	// --- REVISED AND MORE ROBUST FETCH LOGIC ---
+
+	// 1. Fetch the course and its complete student list first.
 	const course = await Course.findOne({ coursecode }).populate('students', 'RegNo StdName');
 
-	if (!course || !course.students || course.students.length === 0) {
+	if (!course) {
 		res.status(404);
-		throw new Error('No students found for the selected course.');
+		throw new Error('Course not found.');
 	}
 
-	let studentsForSession = [...course.students];
+	let studentsForSession;
 
-	// --- NEW CUSTOM SORTING LOGIC ---
-	// This sorts students based on the last 3 digits of their RegNo, like a roll call.
-	studentsForSession.sort((a, b) => {
-		const rollNoA = a.RegNo.slice(-3);
-		const rollNoB = b.RegNo.slice(-3);
-		return rollNoA.localeCompare(rollNoB);
-	});
-	// --- END OF NEW SORTING LOGIC ---
-
-
-	// --- CORRECTED BATCH SLICING LOGIC ---
-	// This now slices the correctly sorted list, mixing boys and girls as intended.
-	const BATCH1_SIZE = 34;
-	const BATCH2_SIZE = 34;
-	const isLabCourse = ['22SPC516', '22SEE501'].includes(coursecode);
-
-	if (isLabCourse && batch) {
-		if (batch === 1) {
-			studentsForSession = studentsForSession.slice(0, BATCH1_SIZE);
-		} else if (batch === 2) {
-			studentsForSession = studentsForSession.slice(BATCH2_SIZE);
+	// 2. Determine the correct student list.
+	if (course.isLab) {
+		if (!batch) {
+			res.status(400);
+			throw new Error('Batch number is required for lab courses.');
 		}
+
+		if (batch == 1) {
+			// Create a Set of Batch 1 student IDs for quick lookups.
+			const batch1IdSet = new Set(course.batch1Students.map(id => id.toString()));
+			// Filter the main student list to get only Batch 1 students.
+			studentsForSession = course.students.filter(student => batch1IdSet.has(student._id.toString()));
+		} else if (batch == 2) {
+			// Create a Set of Batch 2 student IDs.
+			const batch2IdSet = new Set(course.batch2Students.map(id => id.toString()));
+			// Filter the main student list to get only Batch 2 students.
+			studentsForSession = course.students.filter(student => batch2IdSet.has(student._id.toString()));
+		} else {
+			res.status(400);
+			throw new Error('Invalid batch number provided.');
+		}
+	} else {
+		// For non-lab courses, use the main student list as before.
+		studentsForSession = course.students;
 	}
-	// --- END OF BATCH LOGIC ---
+
+	if (!studentsForSession || studentsForSession.length === 0) {
+		// This is the error you are seeing. It means the list for Batch 2 is still empty after filtering.
+		res.status(404);
+		throw new Error('No students found for the selected course/batch.');
+	}
+
+	// --- END OF REVISED LOGIC ---
+
+	// The rest of the function remains the same...
+	studentsForSession.sort((a, b) => a.RegNo.slice(-3).localeCompare(b.RegNo.slice(-3)));
 
 	const existingReport = await Report.findOne({
 		course: course._id,
@@ -100,9 +114,8 @@ const fetchData = asyncHandler(async (req, res) => {
 		isExpired = existingReport.isExpired;
 		freeze = existingReport.freeze;
 		const attendanceMap = new Map(
-			existingReport.attendance.map(att => [att.student.RegNo, att.status])
+			existing - Report.attendance.map(att => [att.student.RegNo, att.status])
 		);
-
 		finalAttendanceData = studentsForSession.map(student => ({
 			RegNo: student.RegNo,
 			Name: student.StdName,
@@ -126,7 +139,6 @@ const fetchData = asyncHandler(async (req, res) => {
 		freeze,
 	});
 });
-
 
 
 

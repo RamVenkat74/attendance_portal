@@ -1,219 +1,169 @@
-import React, { useEffect, useState } from 'react';
+// src/pages/TimeTableVerify.js
+
+import React, { useState, useEffect, useContext } from 'react';
 import {
-	Table,
-	Checkbox,
-	Button,
-	Form,
-	Row,
-	Col,
-	notification,
-	Spin,
-	Card,
-	Select,
-	message,
-	Empty,
+	Row, Col, Card, Select, Button, message, Empty, List, Form, Popconfirm, Spin
 } from 'antd';
-import { SaveOutlined, CalendarOutlined } from '@ant-design/icons';
+import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import { authContext } from '../context/authContext';
 import { url as backendUrl } from '../Backendurl';
 
 const TimeTableVerify = () => {
+	const { courses, isCoursesLoading } = useContext(authContext);
 	const [form] = Form.useForm();
-	const [courses, setCourses] = useState([]);
+
 	const [selectedCourse, setSelectedCourse] = useState(null);
-	const [isCoursesLoading, setIsCoursesLoading] = useState(true);
-	const [isTimetableLoading, setIsTimetableLoading] = useState(false);
+	const [schedule, setSchedule] = useState([]);
+	const [isScheduleLoading, setIsScheduleLoading] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
-	useEffect(() => {
-		const fetchCourses = async () => {
-			try {
-				const token = localStorage.getItem('token');
-				const response = await fetch(`${backendUrl}/faculty/dashboard`, {
-					headers: { Authorization: `Bearer ${token}` },
-				});
-				if (!response.ok) throw new Error('Failed to fetch courses.');
-				const data = await response.json();
-				setCourses(data || []);
-			} catch (err) {
-				message.error(err.message || 'Failed to fetch courses.');
-			} finally {
-				setIsCoursesLoading(false);
-			}
-		};
-		fetchCourses();
-		document.title = 'ATTENDANCE SYSTEM | TIMETABLE';
-	}, []);
+	const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+	const hours = Array.from({ length: 8 }, (_, i) => i + 1);
 
-	const handleCourseChange = async (courseId) => {
-		const course = courses.find(c => c._id === courseId);
-		setSelectedCourse(course);
-		form.resetFields();
-
-		if (!courseId) return;
-
-		setIsTimetableLoading(true);
-		try {
-			const token = localStorage.getItem('token');
-			const response = await fetch(`${backendUrl}/timetables/${courseId}`, {
-				headers: { Authorization: `Bearer ${token}` },
-			});
-			if (response.ok) {
-				const data = await response.json();
-				const formValues = convertToFormValues(data.timetable);
-				form.setFieldsValue(formValues);
-			} else if (response.status !== 404) {
-				const errorData = await response.json();
-				throw new Error(errorData.message);
-			}
-		} catch (error) {
-			message.error(error.message || 'An error occurred while fetching the timetable.');
-		} finally {
-			setIsTimetableLoading(false);
-		}
-	};
-
-	const convertToFormValues = (timetable) => {
-		const values = {};
-		if (!timetable) return values;
-		const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
-		days.forEach((day, dayIndex) => {
-			if (timetable[day]) {
-				timetable[day].forEach(hour => {
-					values[`hour${hour}_${dayIndex}`] = true;
-				});
-			}
-		});
-		return values;
-	};
-
-	const generateTimetableFromForm = (values) => {
-		const timetable = { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [] };
-		const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
-		days.forEach((day, dayIndex) => {
-			for (let hour = 1; hour <= 8; hour++) {
-				if (values[`hour${hour}_${dayIndex}`]) {
-					timetable[day].push(hour);
-				}
-			}
-		});
-		return timetable;
-	};
-
-	const onFinish = async (values) => {
-		if (!selectedCourse) {
-			message.error('Please select a course first.');
+	const fetchSchedule = async (courseId) => {
+		if (!courseId) {
+			setSchedule([]);
 			return;
 		}
-		setIsSubmitting(true);
-		const timetable = generateTimetableFromForm(values);
-
+		setIsScheduleLoading(true);
 		try {
 			const token = localStorage.getItem('token');
-			const response = await fetch(`${backendUrl}/timetables`, {
+			const response = await fetch(`${backendUrl}/schedules/${courseId}`, {
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			if (!response.ok) throw new Error('Failed to fetch schedule.');
+			const data = await response.json();
+			setSchedule(data);
+		} catch (error) {
+			message.error(error.message);
+		} finally {
+			setIsScheduleLoading(false);
+		}
+	};
+
+	const handleCourseChange = (courseId) => {
+		const course = courses.find(c => c._id === courseId);
+		setSelectedCourse(course);
+		fetchSchedule(courseId);
+		form.resetFields();
+	};
+
+	const handleAddSlot = async (values) => {
+		setIsSubmitting(true);
+		try {
+			const token = localStorage.getItem('token');
+			const response = await fetch(`${backendUrl}/schedules`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-				body: JSON.stringify({
-					course: selectedCourse._id,
-					timetable,
-				}),
+				body: JSON.stringify({ ...values, courseId: selectedCourse._id }),
 			});
 			if (!response.ok) {
 				const errorData = await response.json();
-				throw new Error(errorData.message);
+				throw new Error(errorData.message || 'Failed to add slot.');
 			}
-			notification.success({
-				message: 'Success',
-				description: 'Timetable has been saved successfully.',
-			});
+			message.success('Schedule slot added successfully!');
+			fetchSchedule(selectedCourse._id); // Refresh the list
+			form.resetFields();
 		} catch (error) {
-			notification.error({
-				message: 'Save Failed',
-				description: error.message || 'An error occurred while saving the timetable.',
-			});
+			message.error(error.message);
 		} finally {
 			setIsSubmitting(false);
 		}
 	};
 
-	const columns = [
-		{ title: 'Day', dataIndex: 'day', key: 'day', fixed: 'left', width: 120 },
-		...Array.from({ length: 8 }, (_, i) => ({
-			title: `Hour ${i + 1}`,
-			key: `hour${i + 1}`,
-			align: 'center',
-			render: (_, record, dayIndex) => (
-				<Form.Item name={`hour${i + 1}_${dayIndex}`} valuePropName="checked" noStyle>
-					<Checkbox />
-				</Form.Item>
-			),
-		})),
-	];
-
-	const tableData = [
-		{ key: '0', day: 'Monday' },
-		{ key: '1', day: 'Tuesday' },
-		{ key: '2', day: 'Wednesday' },
-		{ key: '3', day: 'Thursday' },
-		{ key: '4', day: 'Friday' },
-	];
+	const handleDeleteSlot = async (slotId) => {
+		try {
+			const token = localStorage.getItem('token');
+			const response = await fetch(`${backendUrl}/schedules/${slotId}`, {
+				method: 'DELETE',
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			if (!response.ok) throw new Error('Failed to delete slot.');
+			message.success('Slot deleted successfully.');
+			fetchSchedule(selectedCourse._id); // Refresh the list
+		} catch (error) {
+			message.error(error.message);
+		}
+	};
 
 	return (
 		<div className="p-6 bg-gray-50 min-h-screen">
-			<h1 className="text-2xl font-bold mb-6 text-gray-800">
-				<CalendarOutlined /> Manage Course Timetables
-			</h1>
+			<h1 className="text-2xl font-bold mb-6 text-gray-800">Manage Course Schedules</h1>
 			<Card className="shadow-md mb-6">
+				<Select
+					loading={isCoursesLoading}
+					className="w-full"
+					placeholder="Select a course to manage its schedule"
+					onChange={handleCourseChange}
+					options={courses.map(course => ({
+						label: `${course.coursename} (${course.coursecode})`,
+						value: course._id,
+					}))}
+				/>
+			</Card>
+
+			{selectedCourse && (
 				<Row gutter={24}>
-					<Col xs={24} md={12}>
-						<label className="block text-sm font-medium text-gray-700 mb-1">Select a Course</label>
-						<Select
-							loading={isCoursesLoading}
-							className="w-full"
-							placeholder="Select a course to view or edit its timetable"
-							value={selectedCourse?._id}
-							onChange={handleCourseChange}
-							options={courses.map(course => ({
-								label: `${course.coursename} (${course.coursecode})`,
-								value: course._id,
-							}))}
-						/>
+					<Col xs={24} md={8}>
+						<Card title="Add a New Slot" className="shadow-md">
+							<Form form={form} layout="vertical" onFinish={handleAddSlot}>
+								<Form.Item name="day" label="Day" rules={[{ required: true }]}>
+									<Select placeholder="Select a day">
+										{daysOfWeek.map(day => <Select.Option key={day} value={day}>{day.charAt(0).toUpperCase() + day.slice(1)}</Select.Option>)}
+									</Select>
+								</Form.Item>
+								<Form.Item name="hour" label="Hour" rules={[{ required: true }]}>
+									<Select placeholder="Select an hour">
+										{hours.map(hour => <Select.Option key={hour} value={hour}>Hour {hour}</Select.Option>)}
+									</Select>
+								</Form.Item>
+								{selectedCourse.isLab && (
+									<Form.Item name="batch" label="Batch" rules={[{ required: true }]}>
+										<Select placeholder="Select a batch">
+											<Select.Option value={1}>Batch 1</Select.Option>
+											<Select.Option value={2}>Batch 2</Select.Option>
+										</Select>
+									</Form.Item>
+								)}
+								<Form.Item>
+									<Button type="primary" htmlType="submit" loading={isSubmitting} icon={<PlusOutlined />}>
+										Add Slot
+									</Button>
+								</Form.Item>
+							</Form>
+						</Card>
+					</Col>
+					<Col xs={24} md={16}>
+						<Card title="Current Schedule" className="shadow-md">
+							{isScheduleLoading ? <div className="text-center"><Spin /></div> : (
+								<List
+									dataSource={schedule}
+									locale={{ emptyText: <Empty description="No schedule slots have been added for this course." /> }}
+									renderItem={slot => (
+										<List.Item
+											actions={[
+												<Popconfirm
+													title="Are you sure you want to delete this slot?"
+													onConfirm={() => handleDeleteSlot(slot._id)}
+													okText="Yes"
+													cancelText="No"
+												>
+													<Button type="text" danger icon={<DeleteOutlined />} />
+												</Popconfirm>
+											]}
+										>
+											<List.Item.Meta
+												title={`${slot.day.charAt(0).toUpperCase() + slot.day.slice(1)} - Hour ${slot.hour}`}
+
+												description={slot.batch ? `Batch ${slot.batch}` : 'Theory Class'}
+											/>
+										</List.Item>
+									)}
+								/>
+							)}
+						</Card>
 					</Col>
 				</Row>
-			</Card>
-			{selectedCourse ? (
-				<Card className="shadow-md">
-					{isTimetableLoading ? (
-						<div className="text-center p-10"><Spin size="large" /></div>
-					) : (
-						<Form form={form} onFinish={onFinish}>
-							<Table
-								columns={columns}
-								dataSource={tableData}
-								pagination={false}
-								bordered
-								scroll={{ x: 'max-content' }}
-								size="middle"
-							/>
-							<Row justify="end" className="mt-6">
-								<Col>
-									<Button
-										type="primary"
-										htmlType="submit"
-										loading={isSubmitting}
-										icon={<SaveOutlined />}
-										size="large"
-									>
-										Save Timetable
-									</Button>
-								</Col>
-							</Row>
-						</Form>
-					)}
-				</Card>
-			) : (
-				<Card className="text-center shadow-md">
-					<Empty description="Please select a course to get started." />
-				</Card>
 			)}
 		</div>
 	);

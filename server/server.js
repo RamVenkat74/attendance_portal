@@ -13,7 +13,9 @@ const facultyRoutes = require('./Routes/facultyRoutes');
 const attendanceRoutes = require('./Routes/attendanceRoutes');
 const adminRoutes = require('./Routes/adminRoutes');
 const timetableRoutes = require('./Routes/timetableRoutes');
-const studentRoutes = require('./Routes/studentRoutes'); // Add this line
+const studentRoutes = require('./Routes/studentRoutes');
+const scheduleRoutes = require('./Routes/scheduleRoutes');
+
 
 // --- Initialization ---
 connectDB();
@@ -31,7 +33,8 @@ app.use('/api/faculty', facultyRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/timetables', timetableRoutes);
-app.use('/api/students', studentRoutes); // Add this line
+app.use('/api/students', studentRoutes);
+app.use('/api/schedules', scheduleRoutes);
 
 // --- Centralized Error Handler ---
 app.use(errorHandler);

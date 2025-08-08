@@ -1,11 +1,41 @@
 // src/context/authContext.js
-import React, { createContext, useState, useEffect } from 'react';
+
+import React, { createContext, useState, useEffect, useCallback } from 'react';
 
 export const authContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-    const [auth, setAuth] = useState(null); // null indicates loading/initial check
+    const [auth, setAuth] = useState(null);
     const [user, setUser] = useState(null);
+
+    // --- NEW STATE for managing courses globally ---
+    const [courses, setCourses] = useState([]);
+    const [isCoursesLoading, setIsCoursesLoading] = useState(true);
+
+    // --- NEW FUNCTION to fetch and update the global course list ---
+    const fetchCourses = useCallback(async () => {
+        // Only fetch if a user is logged in
+        if (!localStorage.getItem('token')) {
+            setCourses([]);
+            return;
+        }
+        setIsCoursesLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            // Assuming this is your endpoint to get a faculty's courses
+            const response = await fetch('http://localhost:5000/api/faculty/dashboard', {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) throw new Error('Failed to fetch courses.');
+            const data = await response.json();
+            setCourses(data || []);
+        } catch (error) {
+            console.error("Failed to fetch courses for context:", error);
+            setCourses([]); // Set to empty on error
+        } finally {
+            setIsCoursesLoading(false);
+        }
+    }, []); // Empty dependency array as it has no external dependencies
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -15,24 +45,26 @@ export const AuthProvider = ({ children }) => {
             try {
                 const userData = JSON.parse(userDataString);
                 setUser(userData);
-                setAuth(true); // Set to true if token and user data exist
+                setAuth(true);
+                // --- FETCH COURSES on initial load if logged in ---
+                fetchCourses();
             } catch (error) {
-                console.error("Error parsing user data from localStorage:", error);
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                setAuth(false); // Set to false if data is invalid
+                // ... existing error handling
+                setAuth(false);
                 setUser(null);
             }
         } else {
-            setAuth(false); // Set to false if no token or user data
+            setAuth(false);
         }
-    }, []);
+    }, [fetchCourses]); // Add fetchCourses to dependency array
 
     const login = (userData, token) => {
         localStorage.setItem('token', token);
         localStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);
         setAuth(true);
+        // --- FETCH COURSES on login ---
+        fetchCourses();
     };
 
     const logout = () => {
@@ -40,9 +72,12 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('user');
         setUser(null);
         setAuth(false);
+        // --- CLEAR COURSES on logout ---
+        setCourses([]);
     };
 
-    const value = { user, auth, login, logout };
+    // --- ADDED courses, isCoursesLoading, and fetchCourses to the value ---
+    const value = { user, auth, login, logout, courses, isCoursesLoading, fetchCourses };
 
     if (auth === null) {
         return <div className="flex justify-center items-center h-screen text-lg">Loading application...</div>;
