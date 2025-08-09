@@ -2,7 +2,7 @@
 
 import React, { useState, useContext } from 'react';
 import {
-    Row, Col, Card, Select, DatePicker, Table, Input, Spin, Button, message, Empty, Form,
+    Row, Col, Card, Select, DatePicker, Table, Input, Button, message, Empty, Form,
 } from 'antd';
 import { FileExcelOutlined, SearchOutlined, FilePdfOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -14,7 +14,7 @@ import { authContext } from '../context/authContext';
 
 const { RangePicker } = DatePicker;
 
-// --- MODIFIED generateColumns to handle cycles ---
+// --- generateColumns is now back to its simpler, non-nested version ---
 const generateColumns = (reportData, cycle, hoursPerCycle) => {
     if (!reportData || reportData.length === 0 || !reportData[0].courses) {
         return [
@@ -25,12 +25,10 @@ const generateColumns = (reportData, cycle, hoursPerCycle) => {
 
     const columns = [
         { title: 'Reg. No', dataIndex: 'RegNo', key: 'RegNo', fixed: 'left', width: 150 },
-        { title: 'Name', dataIndex: 'name', key: 'name', fixed: 'left', width: 200 },
+        { title: 'Name', dataIndex: 'name', key: 'name', fixed: 'left', width: 150 },
     ];
 
     const dailyStatuses = reportData[0].courses[0].statuses || [];
-
-    // Slicing logic for cycles
     const startIndex = (cycle - 1) * hoursPerCycle;
     const endIndex = startIndex + hoursPerCycle;
     const cycleStatuses = dailyStatuses.slice(startIndex, endIndex);
@@ -54,7 +52,7 @@ const generateColumns = (reportData, cycle, hoursPerCycle) => {
     });
 
     columns.push(
-        { title: 'Tot Hours', dataIndex: ['courses', 0, 'totalHours'], key: 'total', width: 130, align: 'center' },
+        { title: 'Total Hours', dataIndex: ['courses', 0, 'totalHours'], key: 'total', width: 130, align: 'center' },
         { title: 'Present', dataIndex: ['courses', 0, 'present'], key: 'present', width: 130, align: 'center' },
         {
             title: 'Percentage',
@@ -70,7 +68,6 @@ const generateColumns = (reportData, cycle, hoursPerCycle) => {
             },
         }
     );
-
     return columns;
 };
 
@@ -81,13 +78,14 @@ const Students = () => {
     const [reportData, setReportData] = useState([]);
     const [searchText, setSearchText] = useState('');
     const [isReportLoading, setIsReportLoading] = useState(false);
-
-    // --- NEW STATE for managing cycles ---
     const [cycle, setCycle] = useState(1);
     const HOURS_PER_CYCLE = 20;
 
+    const totalStatuses = reportData[0]?.courses[0]?.statuses?.length || 0;
+    const totalCycles = Math.ceil(totalStatuses / HOURS_PER_CYCLE);
+
     const handleGenerateReport = async (values) => {
-        setCycle(1); // Reset to the first cycle on new report
+        setCycle(1);
         const { courseId, dateRange } = values;
         const [startDate, endDate] = dateRange;
         const selectedCourse = courses.find(c => c._id === courseId);
@@ -121,116 +119,123 @@ const Students = () => {
 
     const columns = generateColumns(reportData, cycle, HOURS_PER_CYCLE);
 
-    const exportToCSV = () => {
-        if (filteredData.length === 0) {
-            message.error('No data to export.');
-            return;
-        }
-
-        // 1. Get headers from the currently visible columns.
-        const headers = columns.map(col => col.exportTitle || col.title);
-
-        // 2. Map the filtered data to match the visible columns.
-        const data = filteredData.map(student => {
-            return columns.map(col => {
-                switch (col.key) {
-                    case 'RegNo': return student.RegNo;
-                    case 'name': return student.name;
-                    case 'total': return student.courses[0]?.totalHours || 0;
-                    case 'present': return student.courses[0]?.present || 0;
-                    case 'percentage':
-                        const course = student.courses[0];
-                        if (!course || !course.totalHours) return 'N/A';
-                        return Math.round((course.present * 100) / course.totalHours) + '%';
-                    default:
-                        if (col.key.startsWith('status-')) {
-                            const index = parseInt(col.key.split('-')[1], 10);
-                            const statusValue = student.courses[0]?.statuses[index]?.status;
-                            if (statusValue === 1) return 'P';
-                            if (statusValue === 2) return 'OD';
-                            if (statusValue === -1) return 'A';
-                            return '';
-                        }
-                        return '';
-                }
-            });
-        });
-
-        // 3. Convert to CSV and trigger download.
-        const csv = Papa.unparse({ fields: headers, data });
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `attendance_report_cycle_${cycle}.csv`); // Add cycle number to filename
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
-    const exportToPDF = () => {
-        if (filteredData.length === 0) {
-            message.error('No data to export.');
-            return;
-        }
-
-        const doc = new jsPDF({ orientation: 'landscape' });
-
-        // 1. Get headers from the currently visible columns.
-        const tableColumns = columns.map(col => col.exportTitle || col.title);
-
-        // 2. Map the filtered data to match the visible columns.
-        const tableRows = filteredData.map(student => {
-            return columns.map(col => {
-                switch (col.key) {
-                    case 'RegNo': return student.RegNo;
-                    case 'name': return student.name;
-                    case 'total': return student.courses[0]?.totalHours || 0;
-                    case 'present': return student.courses[0]?.present || 0;
-                    case 'percentage':
-                        const course = student.courses[0];
-                        if (!course || !course.totalHours) return 'N/A';
-                        return Math.round((course.present * 100) / course.totalHours) + '%';
-                    default:
-                        if (col.key.startsWith('status-')) {
-                            const index = parseInt(col.key.split('-')[1], 10);
-                            const statusValue = student.courses[0]?.statuses[index]?.status;
-                            if (statusValue === 1) return 'P';
-                            if (statusValue === 2) return 'OD';
-                            if (statusValue === -1) return 'A';
-                            return '';
-                        }
-                        return '';
-                }
-            });
-        });
-
-        const courseName = form.getFieldValue('courseId') ? courses.find(c => c._id === form.getFieldValue('courseId')).coursename : '';
-        doc.setFontSize(16).text(`Class Attendance Report: ${courseName}`, 14, 15);
-        doc.setFontSize(10).text(`Cycle ${cycle}: Hours ${((cycle - 1) * HOURS_PER_CYCLE) + 1} - ${Math.min(cycle * HOURS_PER_CYCLE, totalStatuses)}`, 14, 22);
-
-        // 3. Draw the table, which will now fit better on the page.
-        autoTable(doc, {
-            head: [tableColumns],
-            body: tableRows,
-            startY: 25,
-            theme: 'grid',
-            styles: { fontSize: 7, cellPadding: 2 },
-            headStyles: { fillColor: [22, 160, 133], textColor: [255, 255, 255], fontStyle: 'bold' },
-        });
-
-        doc.save(`attendance_report_cycle_${cycle}.pdf`); // Add cycle number to filename
-    };
-
-    const filteredData = reportData.filter(
-        student =>
-            (student.name && student.name.toLowerCase().includes(searchText.toLowerCase())) ||
-            (student.RegNo && student.RegNo.toLowerCase().includes(searchText.toLowerCase()))
+    const filteredData = reportData.filter(student =>
+        (student.name && student.name.toLowerCase().includes(searchText.toLowerCase())) ||
+        (student.RegNo && student.RegNo.toLowerCase().includes(searchText.toLowerCase()))
     );
 
-    const totalStatuses = reportData[0]?.courses[0]?.statuses?.length || 0;
-    const totalCycles = Math.ceil(totalStatuses / HOURS_PER_CYCLE);
+    const exportToFile = (format) => {
+        if (filteredData.length === 0) {
+            message.error('No data to export.');
+            return;
+        }
 
+        const flattenColumns = (cols) => {
+            return cols.reduce((acc, col) => {
+                if (col.children) {
+                    return [...acc, ...flattenColumns(col.children)];
+                }
+                return [...acc, col];
+            }, []);
+        };
+
+        const allColumnsForExport = generateColumns(reportData, 1, totalStatuses);
+        const flatColumns = flattenColumns(allColumnsForExport);
+
+        // --- FIX: Use the same reliable data generation for both CSV and PDF ---
+        const bodyData = filteredData.map(student => {
+            return flatColumns.map(col => {
+                switch (col.key) {
+                    case 'RegNo': return student.RegNo;
+                    case 'name': return student.name;
+                    case 'total': return student.courses[0]?.totalHours || 0;
+                    case 'present': return student.courses[0]?.present || 0;
+                    case 'percentage':
+                        const course = student.courses[0];
+                        if (!course || !course.totalHours) return 'N/A';
+                        return Math.round((course.present * 100) / course.totalHours) + '%';
+                    default:
+                        if (col.key.startsWith('status-')) {
+                            const index = parseInt(col.key.split('-')[1], 10);
+                            const statusValue = student.courses[0]?.statuses[index]?.status;
+                            if (statusValue === 1) return 'P';
+                            if (statusValue === 2) return 'OD';
+                            if (statusValue === -1) return 'A';
+                            return '';
+                        }
+                        return '';
+                }
+            });
+        });
+
+        const courseName = form.getFieldValue('courseId') ? courses.find(c => c._id === form.getFieldValue('courseId')).coursename : 'report';
+        const filename = `${courseName.replace(/\s+/g, '_')}_full_report`;
+
+        if (format === 'csv') {
+            const headers = flatColumns.map(col => col.exportTitle || col.title);
+            const csv = Papa.unparse({ fields: headers, data: bodyData });
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute('download', `${filename}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        else if (format === 'pdf') {
+            const doc = new jsPDF({ orientation: 'landscape' });
+            doc.setFontSize(16).text(`Class Attendance Report: ${courseName}`, 14, 15);
+
+            const head = [[]];
+            const subHead = [];
+            head[0].push({ content: 'Reg. No', rowSpan: 2 });
+            head[0].push({ content: 'Name', rowSpan: 2 });
+
+            const dailyStatuses = reportData[0].courses[0].statuses || [];
+            const monthlyGroups = dailyStatuses.reduce((acc, status) => {
+                const monthYear = dayjs(status.date).format('MMMM YYYY');
+                if (!acc[monthYear]) acc[monthYear] = [];
+                acc[monthYear].push(status);
+                return acc;
+            }, {});
+
+            Object.entries(monthlyGroups).forEach(([monthYear, statuses]) => {
+                head[0].push({ content: monthYear, colSpan: statuses.length, styles: { halign: 'center' } });
+                statuses.forEach(status => {
+                    subHead.push({
+                        content: `${dayjs(status.date).format('DD')}`,
+                        styles: { halign: 'center' }
+                    });
+                });
+            });
+
+            head[0].push(
+                { content: 'Total Hours', rowSpan: 2 },
+                { content: 'Attended', rowSpan: 2 },
+                { content: '%', rowSpan: 2 }
+            );
+            head.push(subHead);
+
+            autoTable(doc, {
+                head: head,
+                body: bodyData, // This now uses the correct data format
+                startY: 20,
+                theme: 'grid',
+                styles: { fontSize: 5, cellPadding: 1.5, halign: 'center' },
+                headStyles: { fillColor: [22, 160, 133], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', lineWidth: 0.1 },
+                columnStyles: {
+                    0: { cellWidth: 13 },
+                    1: { cellWidth: 16 },
+                    [flatColumns.length - 3]: { cellWidth: 9 }, // Total Hours
+                    [flatColumns.length - 2]: { cellWidth: 8 }, // Present
+                    [flatColumns.length - 1]: { cellWidth: 8 }, // Percentage
+                },
+                rowPageBreak: 'avoid',
+            });
+
+            doc.save(`${filename}.pdf`);
+        }
+    };
     return (
         <div className="p-6 bg-gray-50 min-h-screen">
             <h1 className="text-2xl font-bold mb-6 text-gray-800">Class Attendance Report</h1>
@@ -278,10 +283,10 @@ const Students = () => {
                     <Col>
                         {reportData.length > 0 && (
                             <div className="space-x-2">
-                                <Button icon={<FileExcelOutlined />} onClick={exportToCSV}>
+                                <Button icon={<FileExcelOutlined />} onClick={() => exportToFile('csv')}>
                                     Export to CSV
                                 </Button>
-                                <Button icon={<FilePdfOutlined />} onClick={exportToPDF} type="primary" ghost>
+                                <Button icon={<FilePdfOutlined />} onClick={() => exportToFile('pdf')} type="primary" ghost>
                                     Export to PDF
                                 </Button>
                             </div>
@@ -289,7 +294,6 @@ const Students = () => {
                     </Col>
                 </Row>
 
-                {/* --- NEW: Cycle navigation buttons --- */}
                 {totalCycles > 1 && (
                     <div className="mb-4 text-center">
                         <Button.Group>

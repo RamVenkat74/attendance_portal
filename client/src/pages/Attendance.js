@@ -13,7 +13,7 @@ const getDayOfWeek = (date) => {
 };
 
 const Attendance = () => {
-	const { user, courses, isCoursesLoading } = useContext(authContext);
+	const { courses, isCoursesLoading } = useContext(authContext);
 	const [selectedCourse, setSelectedCourse] = useState(null);
 	const [selectedDate, setSelectedDate] = useState(dayjs());
 	const [selectedHour, setSelectedHour] = useState(null);
