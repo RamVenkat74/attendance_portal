@@ -5,10 +5,10 @@ const { protect } = require('../Middleware/middleware');
 const {
     auth,
     register,
-    addRep,
     removeRep,
     getRepresentatives,
     updateRepresentativeRole,
+    createRepresentative, // Use the correct function for creating reps
 } = require('../Controllers/adminController');
 
 const router = Router();
@@ -17,14 +17,14 @@ const router = Router();
 router.post('/auth/login', auth);
 router.post('/auth/register', register);
 
-// --- FIX: Consolidated all '/representatives' routes into one block ---
+// Routes for managing representatives (now only Class Reps)
 router.route('/representatives')
-    .get(protect, getRepresentatives)   // GET all representatives
-    .post(protect, addRep);             // POST to create a new representative
+    .get(protect, getRepresentatives)       // GET all representatives
+    .post(protect, createRepresentative);   // POST to create a new representative
 
-// --- FIX: Defined specific routes with IDs separately ---
+// Routes for a specific representative by their ID
 router.route('/representatives/:repId')
-    .delete(protect, removeRep); // DELETE a specific representative by ID
+    .delete(protect, removeRep); // DELETE a specific representative
 
 router.route('/representatives/:repId/role')
     .patch(protect, updateRepresentativeRole); // PATCH to update a rep's role

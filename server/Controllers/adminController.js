@@ -34,7 +34,6 @@ const register = asyncHandler(async (req, res) => {
     }
 });
 
-// --- THIS FUNCTION IS NOW UPDATED ---
 const auth = asyncHandler(async (req, res) => {
     const { username, password, loginType } = req.body;
 
@@ -46,17 +45,15 @@ const auth = asyncHandler(async (req, res) => {
     const user = await Admin.findOne({ username });
 
     if (user && (await user.matchPassword(password))) {
-        // Check permissions based on the selected login portal
         if (loginType === 'Faculty') {
             if (user.role !== 'A') {
                 res.status(401);
-                throw new Error('Access denied. Please use the Representative login portal.');
+                throw new Error('Access denied. Please use the Class Rep login portal.');
             }
         } else if (loginType === 'Representative') {
-            // Allow both 'U' (per-course) and 'C' (class-wide) Reps to log in here
-            if (!['U', 'C'].includes(user.role)) {
+            if (user.role !== 'C') {
                 res.status(401);
-                throw new Error('Access denied. You are not a registered Representative.');
+                throw new Error('Access denied. You are not a registered Class Representative.');
             }
         }
 
@@ -70,45 +67,42 @@ const auth = asyncHandler(async (req, res) => {
     }
 });
 
-const addRep = asyncHandler(async (req, res) => {
-    const { username, password, coursecode } = req.body;
+// This is the new, primary function for creating any non-admin user
+const createRepresentative = asyncHandler(async (req, res) => {
+    const { username, password, assignedClass } = req.body;
+    if (!username || !password || !assignedClass) {
+        throw new Error('Username, password, and assigned class are required.');
+    }
     const repExists = await Admin.findOne({ username });
     if (repExists) {
         res.status(400);
-        throw new Error('Representative username already exists');
+        throw new Error('Username already exists.');
     }
-    const rep = await Admin.create({ username, password, role: 'U' });
-    const course = await Course.findOneAndUpdate(
-        { coursecode },
-        { $push: { faculty: rep._id } },
-        { new: true }
-    );
-    if (!course) {
-        res.status(404);
-        throw new Error('Course not found.');
-    }
-    res.status(201).json({
-        message: 'New representative added successfully',
-        representative: { _id: rep._id, username: rep.username },
+    // All created representatives are now Class Reps by default
+    const rep = await Admin.create({
+        username,
+        password,
+        role: 'C',
+        assignedClass,
     });
+    res.status(201).json({ message: 'New Class Rep created successfully.', rep });
 });
+
 
 const removeRep = asyncHandler(async (req, res) => {
     const { repId } = req.params;
-    await Course.updateMany(
-        { faculty: repId },
-        { $pull: { faculty: repId } }
-    );
-    const result = await Admin.deleteOne({ _id: repId, role: { $in: ['U', 'C'] } });
+    // This function now only needs to delete the user account
+    const result = await Admin.deleteOne({ _id: repId, role: 'C' });
     if (result.deletedCount === 0) {
         res.status(404);
-        throw new Error('Representative not found or is not a deletable role.');
+        throw new Error('Class Representative not found.');
     }
     res.status(200).json({ message: 'Representative removed successfully' });
 });
 
 const getRepresentatives = asyncHandler(async (req, res) => {
-    const representatives = await Admin.find({ role: { $in: ['U', 'C'] } }).select('-password');
+    // This now only fetches users with the 'C' role
+    const representatives = await Admin.find({ role: 'C' }).select('-password');
     res.status(200).json(representatives);
 });
 
@@ -120,10 +114,18 @@ const updateRepresentativeRole = asyncHandler(async (req, res) => {
         res.status(404);
         throw new Error('Representative not found.');
     }
+    // This function now toggles a user between Admin and Class Rep
     rep.role = role;
     rep.assignedClass = role === 'C' ? assignedClass : null;
     await rep.save();
     res.status(200).json({ message: 'Representative role updated successfully.' });
 });
 
-module.exports = { auth, register, addRep, removeRep, getRepresentatives, updateRepresentativeRole };
+module.exports = {
+    auth,
+    register,
+    removeRep,
+    getRepresentatives,
+    updateRepresentativeRole,
+    createRepresentative
+};
