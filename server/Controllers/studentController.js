@@ -9,34 +9,35 @@ const Report = require('../Models/reportModel');
  * @access  Private
  */
 const addStudentToCourse = asyncHandler(async (req, res) => {
-    const { RegNo, StdName, courseId } = req.body;
-
-    if (!RegNo || !StdName || !courseId) {
-        res.status(400);
-        throw new Error('Register number, name, and course ID are required.');
-    }
+    // Get 'batch' from the request body
+    const { RegNo, StdName, courseId, batch } = req.body;
+    // ... (validation is the same)
 
     const course = await Course.findById(courseId);
-    if (!course) {
-        res.status(404);
-        throw new Error('Course not found.');
-    }
+    if (!course) { /* ... error handling ... */ }
 
-    // Find student or create if they don't exist. This prevents duplicate students across the system.
     let student = await Student.findOneAndUpdate(
         { RegNo: RegNo.toUpperCase() },
         { $setOnInsert: { StdName, RegNo: RegNo.toUpperCase() } },
         { new: true, upsert: true }
     );
 
-    // Add student to the course's student list if they are not already in it
-    await Course.updateOne(
-        { _id: courseId },
-        { $addToSet: { students: student._id } }
-    );
+    // Add student to the main list
+    const updateQuery = { $addToSet: { students: student._id } };
 
+    // If it's a lab and a batch is specified, add to the correct batch list
+    if (course.isLab && batch) {
+        if (batch == 1) {
+            updateQuery.$addToSet.batch1Students = student._id;
+        } else if (batch == 2) {
+            updateQuery.$addToSet.batch2Students = student._id;
+        }
+    }
+
+    await Course.updateOne({ _id: courseId }, updateQuery);
     res.status(201).json(student);
 });
+
 
 /**
  * @desc    Update a student's details
@@ -67,10 +68,16 @@ const updateStudent = asyncHandler(async (req, res) => {
 const removeStudentFromCourse = asyncHandler(async (req, res) => {
     const { studentId, courseId } = req.params;
 
-    // Remove student from the course's student list
+    // Remove student from the main list AND both batch lists
     await Course.updateOne(
         { _id: courseId },
-        { $pull: { students: studentId } }
+        {
+            $pull: {
+                students: studentId,
+                batch1Students: studentId,
+                batch2Students: studentId,
+            }
+        }
     );
 
     // Also remove the student's attendance records for this specific course

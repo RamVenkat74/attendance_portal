@@ -1,3 +1,5 @@
+// server/Controllers/adminController.js
+
 const asyncHandler = require('express-async-handler');
 const jwt = require('jsonwebtoken');
 const Admin = require('../Models/adminModel');
@@ -32,23 +34,30 @@ const register = asyncHandler(async (req, res) => {
     }
 });
 
+// --- THIS FUNCTION IS NOW UPDATED ---
 const auth = asyncHandler(async (req, res) => {
     const { username, password, loginType } = req.body;
 
-    // --- FIX: Add a strict check for loginType ---
     if (!loginType || !['Faculty', 'Representative'].includes(loginType)) {
         res.status(400);
-        throw new Error('A valid login type (Faculty or Representative) is required.');
+        throw new Error('A valid login type is required.');
     }
 
     const user = await Admin.findOne({ username });
 
     if (user && (await user.matchPassword(password))) {
-        const expectedRole = loginType === 'Faculty' ? 'A' : 'U';
-
-        if (user.role !== expectedRole) {
-            res.status(401);
-            throw new Error('Access denied. Please use the correct login portal for your role.');
+        // Check permissions based on the selected login portal
+        if (loginType === 'Faculty') {
+            if (user.role !== 'A') {
+                res.status(401);
+                throw new Error('Access denied. Please use the Representative login portal.');
+            }
+        } else if (loginType === 'Representative') {
+            // Allow both 'U' (per-course) and 'C' (class-wide) Reps to log in here
+            if (!['U', 'C'].includes(user.role)) {
+                res.status(401);
+                throw new Error('Access denied. You are not a registered Representative.');
+            }
         }
 
         res.json({
@@ -60,7 +69,6 @@ const auth = asyncHandler(async (req, res) => {
         throw new Error('Invalid username or password');
     }
 });
-
 
 const addRep = asyncHandler(async (req, res) => {
     const { username, password, coursecode } = req.body;
@@ -86,22 +94,36 @@ const addRep = asyncHandler(async (req, res) => {
 });
 
 const removeRep = asyncHandler(async (req, res) => {
-    const { username, coursecode } = req.body;
-    const rep = await Admin.findOne({ username, role: 'U' });
-    if (!rep) {
-        res.status(404);
-        throw new Error('Representative not found');
-    }
-    const courseUpdateResult = await Course.updateOne(
-        { coursecode },
-        { $pull: { faculty: rep._id } }
+    const { repId } = req.params;
+    await Course.updateMany(
+        { faculty: repId },
+        { $pull: { faculty: repId } }
     );
-    if (courseUpdateResult.modifiedCount === 0) {
+    const result = await Admin.deleteOne({ _id: repId, role: { $in: ['U', 'C'] } });
+    if (result.deletedCount === 0) {
         res.status(404);
-        throw new Error('Course not found, or representative was not assigned to it.');
+        throw new Error('Representative not found or is not a deletable role.');
     }
-    await Admin.deleteOne({ _id: rep._id });
     res.status(200).json({ message: 'Representative removed successfully' });
 });
 
-module.exports = { auth, register, addRep, removeRep };
+const getRepresentatives = asyncHandler(async (req, res) => {
+    const representatives = await Admin.find({ role: { $in: ['U', 'C'] } }).select('-password');
+    res.status(200).json(representatives);
+});
+
+const updateRepresentativeRole = asyncHandler(async (req, res) => {
+    const { repId } = req.params;
+    const { role, assignedClass } = req.body;
+    const rep = await Admin.findById(repId);
+    if (!rep) {
+        res.status(404);
+        throw new Error('Representative not found.');
+    }
+    rep.role = role;
+    rep.assignedClass = role === 'C' ? assignedClass : null;
+    await rep.save();
+    res.status(200).json({ message: 'Representative role updated successfully.' });
+});
+
+module.exports = { auth, register, addRep, removeRep, getRepresentatives, updateRepresentativeRole };

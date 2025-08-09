@@ -80,6 +80,11 @@ const Students = () => {
     const [isReportLoading, setIsReportLoading] = useState(false);
     const [cycle, setCycle] = useState(1);
     const HOURS_PER_CYCLE = 20;
+    const [pagination, setPagination] = useState({ current: 1, pageSize: 100 });
+
+    const handlePaginationChange = (page, pageSize) => {
+        setPagination({ current: page, pageSize: pageSize });
+    };
 
     const totalStatuses = reportData[0]?.courses[0]?.statuses?.length || 0;
     const totalCycles = Math.ceil(totalStatuses / HOURS_PER_CYCLE);
@@ -226,9 +231,9 @@ const Students = () => {
                 columnStyles: {
                     0: { cellWidth: 13 },
                     1: { cellWidth: 16 },
-                    [flatColumns.length - 3]: { cellWidth: 9 }, // Total Hours
-                    [flatColumns.length - 2]: { cellWidth: 8 }, // Present
-                    [flatColumns.length - 1]: { cellWidth: 8 }, // Percentage
+                    [flatColumns.length - 3]: { cellWidth: 8 }, // Total Hours
+                    [flatColumns.length - 2]: { cellWidth: 7 }, // Present
+                    [flatColumns.length - 1]: { cellWidth: 7 }, // Percentage
                 },
                 rowPageBreak: 'avoid',
             });
@@ -316,8 +321,16 @@ const Students = () => {
                     rowKey="RegNo"
                     loading={isReportLoading}
                     scroll={{ x: 'max-content' }}
-                    pagination={{ pageSize: 10 }}
-                    locale={{ emptyText: <Empty description="No report generated. Please fill out the form above." /> }}
+                    locale={{ emptyText: <Empty description="No report generated." /> }}
+
+                    // --- UPDATE THIS PROP ---
+                    pagination={{
+                        current: pagination.current,
+                        pageSize: pagination.pageSize,
+                        onChange: handlePaginationChange, // Add the onChange handler
+                        showSizeChanger: true,
+                        pageSizeOptions: ['10', '20', '50', '100'],
+                    }}
                 />
             </Card>
         </div>

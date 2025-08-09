@@ -1,29 +1,37 @@
 // src/context/authContext.js
 
 import React, { createContext, useState, useEffect, useCallback } from 'react';
+import { url as backendUrl } from '../Backendurl'; // Make sure this is imported
 
 export const authContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
     const [auth, setAuth] = useState(null);
     const [user, setUser] = useState(null);
-
-    // --- NEW STATE for managing courses globally ---
     const [courses, setCourses] = useState([]);
     const [isCoursesLoading, setIsCoursesLoading] = useState(true);
 
-    // --- NEW FUNCTION to fetch and update the global course list ---
-    const fetchCourses = useCallback(async () => {
-        // Only fetch if a user is logged in
-        if (!localStorage.getItem('token')) {
+    // --- UPDATED fetchCourses function to be role-aware ---
+    const fetchCourses = useCallback(async (currentUser) => {
+        const userForFetch = currentUser || JSON.parse(localStorage.getItem('user'));
+        const token = localStorage.getItem('token');
+
+        if (!token || !userForFetch) {
             setCourses([]);
             return;
         }
+
         setIsCoursesLoading(true);
         try {
-            const token = localStorage.getItem('token');
-            // Assuming this is your endpoint to get a faculty's courses
-            const response = await fetch('http://localhost:5000/api/faculty/dashboard', {
+            // Choose the correct endpoint based on the user's role
+            let endpoint = '';
+            if (userForFetch.role === 'C') {
+                endpoint = '/faculty/class-courses'; // New endpoint for Class Reps
+            } else {
+                endpoint = '/faculty/dashboard'; // Old endpoint for Admins/Reps
+            }
+
+            const response = await fetch(`${backendUrl}${endpoint}`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (!response.ok) throw new Error('Failed to fetch courses.');
@@ -31,40 +39,38 @@ export const AuthProvider = ({ children }) => {
             setCourses(data || []);
         } catch (error) {
             console.error("Failed to fetch courses for context:", error);
-            setCourses([]); // Set to empty on error
+            setCourses([]);
         } finally {
             setIsCoursesLoading(false);
         }
-    }, []); // Empty dependency array as it has no external dependencies
+    }, []);
 
     useEffect(() => {
         const token = localStorage.getItem('token');
         const userDataString = localStorage.getItem('user');
-
         if (token && userDataString) {
             try {
                 const userData = JSON.parse(userDataString);
                 setUser(userData);
                 setAuth(true);
-                // --- FETCH COURSES on initial load if logged in ---
-                fetchCourses();
+                // Pass the user data directly to ensure the correct role is used
+                fetchCourses(userData);
             } catch (error) {
-                // ... existing error handling
                 setAuth(false);
                 setUser(null);
             }
         } else {
             setAuth(false);
         }
-    }, [fetchCourses]); // Add fetchCourses to dependency array
+    }, [fetchCourses]);
 
     const login = (userData, token) => {
         localStorage.setItem('token', token);
         localStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);
         setAuth(true);
-        // --- FETCH COURSES on login ---
-        fetchCourses();
+        // Pass the user data directly on login
+        fetchCourses(userData);
     };
 
     const logout = () => {
@@ -72,11 +78,9 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('user');
         setUser(null);
         setAuth(false);
-        // --- CLEAR COURSES on logout ---
         setCourses([]);
     };
 
-    // --- ADDED courses, isCoursesLoading, and fetchCourses to the value ---
     const value = { user, auth, login, logout, courses, isCoursesLoading, fetchCourses };
 
     if (auth === null) {

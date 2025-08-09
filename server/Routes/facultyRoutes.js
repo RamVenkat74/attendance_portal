@@ -30,5 +30,10 @@ router.route('/courses/:id')
 
 router.route('/courses/:id/students')
 	.get(facultyController.getCourseStudents);
+// DELETE /api/faculty/courses/:courseId/representatives/:repId - Un-assigns a rep from a course
+router.route('/courses/:courseId/representatives/:repId')
+	.delete(facultyController.removeRepFromCourse);
+
+router.get('/class-courses', facultyController.getCoursesForClassRep);
 
 module.exports = router;

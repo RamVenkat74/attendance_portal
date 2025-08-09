@@ -1,8 +1,10 @@
+// server/Controllers/attendanceController.js
+
 const asyncHandler = require('express-async-handler');
 const Report = require('../Models/reportModel');
 const Student = require('../Models/studentModel');
 const Course = require('../Models/courseModel');
-const Timetable = require('../Models/timetableModel');
+const Schedule = require('../Models/scheduleModel'); // Use the new Schedule model
 const moment = require('moment');
 
 const updateAttendance = asyncHandler(async (req, res) => {
@@ -16,6 +18,26 @@ const updateAttendance = asyncHandler(async (req, res) => {
 		res.status(404);
 		throw new Error('Course not found');
 	}
+	const user = req.user;
+
+	// --- NEW, COMPREHENSIVE PERMISSION LOGIC ---
+	let isAuthorized = false;
+	if (user.role === 'A') {
+		isAuthorized = true;
+	} else if (user.role === 'U') {
+		isAuthorized = course.faculty.includes(user.id);
+	} else if (user.role === 'C') {
+		// This now correctly compares the user's assigned class ("CSE / 3")
+		// with the course's department/year field ("CSE / 3").
+		isAuthorized = user.assignedClass === course.dept;
+	}
+
+	if (!isAuthorized) {
+		res.status(403);
+		throw new Error('You are not authorized to view students for this course.');
+	}
+	// --- END PERMISSION LOGIC ---
+
 	const studentRegNos = attendance.map(att => att.RegNo);
 	const studentDocs = await Student.find({ RegNo: { $in: studentRegNos } }).select('_id RegNo');
 	const studentMap = new Map(studentDocs.map(s => [s.RegNo, s._id]));
@@ -23,6 +45,7 @@ const updateAttendance = asyncHandler(async (req, res) => {
 		student: studentMap.get(att.RegNo),
 		status: att.status,
 	}));
+
 	const bulkOps = hr.map(hour => ({
 		updateOne: {
 			filter: { course: course._id, date, hr: hour },
@@ -37,6 +60,7 @@ const updateAttendance = asyncHandler(async (req, res) => {
 			upsert: true,
 		},
 	}));
+
 	if (bulkOps.length > 0) {
 		await Report.bulkWrite(bulkOps);
 	}
@@ -45,13 +69,10 @@ const updateAttendance = asyncHandler(async (req, res) => {
 
 const fetchData = asyncHandler(async (req, res) => {
 	const { date, coursecode, hr, batch } = req.body;
-
 	if (!date || !coursecode || !hr || !Array.isArray(hr) || hr.length === 0) {
 		res.status(400);
 		throw new Error('Date, course code, and hour(s) are required.');
 	}
-
-	// --- UPDATED LOGIC: Fetch the course with all student lists populated ---
 	const course = await Course.findOne({ coursecode })
 		.populate('students', 'RegNo StdName')
 		.populate('batch1Students', 'RegNo StdName')
@@ -61,26 +82,39 @@ const fetchData = asyncHandler(async (req, res) => {
 		res.status(404);
 		throw new Error('Course not found.');
 	}
+	const user = req.user;
+
+	// --- NEW, COMPREHENSIVE PERMISSION LOGIC ---
+	let isAuthorized = false;
+	if (user.role === 'A') {
+		isAuthorized = true;
+	} else if (user.role === 'U') {
+		isAuthorized = course.faculty.includes(user.id);
+	} else if (user.role === 'C') {
+		// This now correctly compares the user's assigned class ("CSE / 3")
+		// with the course's department/year field ("CSE / 3").
+		isAuthorized = user.assignedClass === course.dept;
+	}
+
+	if (!isAuthorized) {
+		res.status(403);
+		throw new Error('You are not authorized to view students for this course.');
+	}
+	// --- END PERMISSION LOGIC ---
 
 	let studentsForSession;
-
-	// --- Determine the correct list of students based on course type and batch ---
 	if (course.isLab) {
 		if (!batch) {
 			res.status(400);
 			throw new Error('Batch number is required for this lab course.');
 		}
-		// Use loose equality (==) in case the batch number is a string
-		if (batch == 1) {
-			studentsForSession = course.batch1Students;
-		} else if (batch == 2) {
-			studentsForSession = course.batch2Students;
-		} else {
+		if (batch == 1) studentsForSession = course.batch1Students;
+		else if (batch == 2) studentsForSession = course.batch2Students;
+		else {
 			res.status(400);
 			throw new Error('Invalid batch number.');
 		}
 	} else {
-		// For a regular theory course, use the main students list
 		studentsForSession = course.students;
 	}
 
@@ -88,11 +122,8 @@ const fetchData = asyncHandler(async (req, res) => {
 		res.status(404);
 		throw new Error('No students found for the selected course/batch.');
 	}
-
-	// Sort the final list by roll call number
 	studentsForSession.sort((a, b) => a.RegNo.slice(-3).localeCompare(b.RegNo.slice(-3)));
 
-	// The rest of the function for checking existing reports remains the same
 	const existingReport = await Report.findOne({
 		course: course._id,
 		date: date,
@@ -118,12 +149,10 @@ const fetchData = asyncHandler(async (req, res) => {
 		finalAttendanceData = studentsForSession.map(student => ({
 			RegNo: student.RegNo,
 			Name: student.StdName,
-			status: 1, // Default to Present
+			status: 1,
 		}));
 	}
-
 	const absentees = finalAttendanceData.filter(s => s.status === -1).length;
-
 	res.status(200).json({
 		reports: finalAttendanceData,
 		count: studentsForSession.length,
@@ -132,8 +161,6 @@ const fetchData = asyncHandler(async (req, res) => {
 		freeze,
 	});
 });
-
-
 
 const studentDashboard = asyncHandler(async (req, res) => {
 	const { RegNo, startDate, endDate, coursecode } = req.body;
@@ -321,6 +348,9 @@ const getMasterReport = asyncHandler(async (req, res) => {
 
 	res.status(200).json(finalReport);
 });
+// All other functions from studentDashboard to getMasterReport remain the same.
+// ... (studentDashboard, unmarkedAttendanceHours, getRecordsByCourse, etc.)
+
 module.exports = {
 	updateAttendance,
 	fetchData,

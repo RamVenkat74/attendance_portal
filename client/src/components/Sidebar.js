@@ -12,34 +12,33 @@ import {
 	BarChartOutlined,
 } from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
-import { authContext } from "../context/authContext"; // Import AuthContext
+import { authContext } from "../context/authContext";
 
 const { Sider } = Layout;
 
 const Sidebar = () => {
-	const { user } = useContext(authContext); // Get user from context
+	const { user } = useContext(authContext);
 	const navigate = useNavigate();
 	const location = useLocation();
 	const [selectedKey, setSelectedKey] = useState(location.pathname.substr(1));
 
 	useEffect(() => {
-		// This keeps the correct menu item highlighted when the route changes
 		setSelectedKey(location.pathname.substr(1) || "attendance");
 	}, [location]);
 
 	const handleMenuClick = (e) => {
-		// This function handles the navigation when a menu item is clicked
 		navigate(`/${e.key}`);
 	};
 
-	// This defines all the navigation items in the sidebar
 	const items = [
 		{
 			key: "attendance",
 			icon: <SolutionOutlined />,
 			label: "Attendance",
 		},
-		// --- FIX: Conditionally render admin-only items based on user role ---
+		// --- THIS LOGIC IS NOW UPDATED ---
+		// It shows the admin-level links ONLY if the user's role is 'A'.
+		// Both 'U' (Rep) and 'C' (Class Rep) will see the limited view.
 		...(user?.role === "A"
 			? [
 				{
@@ -53,7 +52,7 @@ const Sidebar = () => {
 					label: "Dashboard",
 				},
 				{
-					key: "students", // This is the "Summary" page
+					key: "students",
 					icon: <BarChartOutlined />,
 					label: "Summary",
 				},

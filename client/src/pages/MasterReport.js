@@ -5,14 +5,12 @@ import {
     Card,
     DatePicker,
     Table,
-    Spin,
     Button,
     message,
     Empty,
     Form,
-    Input, // --- FIX: Import Input instead of Select ---
+    Input,
 } from 'antd';
-import { FileDoneOutlined } from '@ant-design/icons';
 import { url as backendUrl } from '../Backendurl';
 
 const { RangePicker } = DatePicker;
@@ -21,6 +19,11 @@ const MasterReport = () => {
     const [form] = Form.useForm();
     const [reportData, setReportData] = useState([]);
     const [isReportLoading, setIsReportLoading] = useState(false);
+    const [pagination, setPagination] = useState({ current: 1, pageSize: 100 });
+
+    const handlePaginationChange = (page, pageSize) => {
+        setPagination({ current: page, pageSize: pageSize });
+    };
 
     useEffect(() => {
         document.title = 'ATTENDANCE SYSTEM | MASTER REPORT';
@@ -123,8 +126,15 @@ const MasterReport = () => {
                     rowKey="RegNo"
                     loading={isReportLoading}
                     scroll={{ x: 'max-content' }}
-                    pagination={{ pageSize: 10 }}
-                    locale={{ emptyText: <Empty description="No report generated. Please fill out the form above." /> }}
+                    locale={{ emptyText: <Empty description="No report generated." /> }}
+
+                    pagination={{
+                        current: pagination.current,
+                        pageSize: pagination.pageSize,
+                        onChange: handlePaginationChange, // Add the onChange handler
+                        showSizeChanger: true,
+                        pageSizeOptions: ['10', '20', '50', '100'],
+                    }}
                 />
             </Card>
         </div>

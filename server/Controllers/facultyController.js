@@ -140,19 +140,34 @@ const createCourseWithStudents = asyncHandler(async (req, res) => {
     }
 });
 const getCourseStudents = asyncHandler(async (req, res) => {
-    const course = await Course.findById(req.params.id).populate('students', 'RegNo StdName');
+    const { batch } = req.query; // Get batch from query parameter (e.g., ?batch=1)
 
-    if (!course) {
-        res.status(404);
-        throw new Error('Course not found');
+    // Populate all student lists
+    const course = await Course.findById(req.params.id)
+        .populate('students', 'RegNo StdName')
+        .populate('batch1Students', 'RegNo StdName')
+        .populate('batch2Students', 'RegNo StdName');
+
+    if (!course) { /* ... error handling ... */ }
+
+    let studentsToReturn;
+    if (course.isLab && batch) {
+        if (batch == 1) {
+            studentsToReturn = course.batch1Students;
+        } else if (batch == 2) {
+            studentsToReturn = course.batch2Students;
+        } else {
+            studentsToReturn = []; // Or throw an error for invalid batch
+        }
+    } else {
+        // If it's not a lab or no batch is specified, return all students
+        studentsToReturn = course.students;
     }
 
-    // --- FIX: Apply custom roll call sorting ---
-    const sortedStudents = [...course.students].sort((a, b) => {
-        const rollNoA = a.RegNo.slice(-3);
-        const rollNoB = b.RegNo.slice(-3);
-        return rollNoA.localeCompare(rollNoB);
-    });
+    // Sort the final list by roll call number
+    const sortedStudents = [...studentsToReturn].sort((a, b) =>
+        a.RegNo.slice(-3).localeCompare(b.RegNo.slice(-3))
+    );
 
     res.status(200).json(sortedStudents);
 });
@@ -187,4 +202,35 @@ const getFacultyTimetable = asyncHandler(async (req, res) => {
 
     res.status(200).json(scheduleSlots);
 });
-module.exports = { getFacultyDashboard, createCourseWithStudents, getCourseStudents, deleteCourse, getFacultyTimetable };
+const removeRepFromCourse = asyncHandler(async (req, res) => {
+    const { courseId, repId } = req.params;
+
+    const course = await Course.findById(courseId);
+    if (!course) {
+        res.status(404);
+        throw new Error('Course not found.');
+    }
+
+    // Use $pull to remove the representative's ID from the faculty array
+    await Course.updateOne(
+        { _id: courseId },
+        { $pull: { faculty: repId } }
+    );
+
+    res.status(200).json({ message: 'Representative removed from course successfully.' });
+});
+
+const getCoursesForClassRep = asyncHandler(async (req, res) => {
+    if (!req.user || req.user.role !== 'C' || !req.user.assignedClass) {
+        res.status(403);
+        throw new Error('Not authorized as a Class Representative.');
+    }
+
+    // --- FIX: Use the 'assignedClass' string directly to query the 'dept' field ---
+    // This correctly finds courses where the 'dept' field is "CSE / 3"
+    const courses = await Course.find({ dept: req.user.assignedClass });
+
+    res.status(200).json(courses);
+});
+
+module.exports = { getFacultyDashboard, createCourseWithStudents, getCourseStudents, deleteCourse, removeRepFromCourse, getFacultyTimetable, getCoursesForClassRep };

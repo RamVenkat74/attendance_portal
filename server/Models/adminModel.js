@@ -15,7 +15,12 @@ const adminSchema = new mongoose.Schema(
         role: {
             type: String,
             required: true,
-            enum: ['A', 'U'], // 'A' for Admin/Faculty, 'U' for User/Representative
+            enum: ['A', 'U', 'C'], // 'A': Admin, 'U': Representative, 'C': Class Rep
+        },
+        // --- ADD THIS FIELD ---
+        assignedClass: { // e.g., "CSE / 3"
+            type: String,
+            default: null,
         },
     },
     {

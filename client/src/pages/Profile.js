@@ -190,7 +190,21 @@ const Profile = () => {
 	};
 
 	const handleRemoveRep = async (repId, courseId) => {
-		message.info('Remove representative functionality to be implemented.');
+		try {
+			const token = localStorage.getItem('token');
+			const response = await fetch(`${backendUrl}/faculty/courses/${courseId}/representatives/${repId}`, {
+				method: 'DELETE',
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.message);
+			}
+			message.success('Representative removed successfully.');
+			fetchDashboardData(); // This should be the function that refreshes your profile data
+		} catch (error) {
+			message.error(error.message);
+		}
 	};
 
 
@@ -259,22 +273,29 @@ const Profile = () => {
 								<Divider />
 								<Collapse ghost>
 									<Panel header={`Representatives (${course.representatives.length})`} key="1">
-										{course.representatives.length > 0 ? (
-											<List
-												dataSource={course.representatives}
-												renderItem={(rep) => (
-													<List.Item
-														actions={[
-															<Button type="link" danger onClick={() => handleRemoveRep(rep._id, course._id)}>
+										<List
+											dataSource={course.representatives}
+											renderItem={(rep) => (
+												<List.Item
+													// --- UPDATE THE ACTIONS for the list item ---
+													actions={[
+														<Popconfirm
+															title="Remove Representative"
+															description="Are you sure you want to un-assign this representative from this course?"
+															onConfirm={() => handleRemoveRep(rep._id, course._id)}
+															okText="Yes, Remove"
+															cancelText="No"
+														>
+															<Button type="link" danger>
 																Remove
 															</Button>
-														]}
-													>
-														{rep.username}
-													</List.Item>
-												)}
-											/>
-										) : <Text type="secondary">No representatives assigned.</Text>}
+														</Popconfirm>
+													]}
+												>
+													{rep.username}
+												</List.Item>
+											)}
+										/>
 									</Panel>
 								</Collapse>
 							</Card>
