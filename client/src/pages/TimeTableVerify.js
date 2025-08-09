@@ -1,6 +1,6 @@
 // src/pages/TimeTableVerify.js
 
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useContext } from 'react';
 import {
 	Row, Col, Card, Select, Button, message, Empty, List, Form, Popconfirm, Spin
 } from 'antd';

@@ -7,112 +7,73 @@ import AttendanceTable from '../components/AttendanceTable';
 import { url as backendUrl } from '../Backendurl';
 import { authContext } from '../context/authContext';
 
-// Helper function remains the same
 const getDayOfWeek = (date) => {
 	const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 	return days[dayjs(date).day()];
 };
 
 const Attendance = () => {
-	// Get global course list from context
 	const { user, courses, isCoursesLoading } = useContext(authContext);
-
-	// Local state for this page's selections
 	const [selectedCourse, setSelectedCourse] = useState(null);
 	const [selectedDate, setSelectedDate] = useState(dayjs());
 	const [selectedHour, setSelectedHour] = useState(null);
-	const [availableHours, setAvailableHours] = useState([]);
-
+	const [selectedBatch, setSelectedBatch] = useState(null);
 	const [students, setStudents] = useState([]);
 	const [isLoading, setIsLoading] = useState(false);
 	const [attendanceData, setAttendanceData] = useState(null);
 
-
-	// --- NEW: State for selected batch ---
-	const [selectedBatch, setSelectedBatch] = useState(null);
-
-	// Effect to auto-select the hour from the timetable
+	// --- REVISED useEffect to auto-select both batch and hour ---
 	useEffect(() => {
-		const fetchTimetableAndSetDefaults = async () => {
-			if (!selectedCourse || !selectedDate) return;
-
-			// --- FIX: Reset hour AND batch when selection changes ---
-			setSelectedHour(null);
-			setSelectedBatch(null);
-
-			try {
-				const token = localStorage.getItem('token');
-				const response = await fetch(`${backendUrl}/timetables/${selectedCourse._id}`, {
-					headers: { Authorization: `Bearer ${token}` },
-				});
-
-				if (response.ok) {
-					const data = await response.json();
-					const dayOfWeek = getDayOfWeek(selectedDate);
-					const scheduledHours = data.timetable?.[dayOfWeek] || [];
-
-					if (scheduledHours.length > 0) {
-						setSelectedHour(scheduledHours[0]); // Auto-select the first scheduled hour
-					}
-				}
-			} catch (error) {
-				console.error("Could not fetch timetable:", error);
+		const autoSelectSlot = async () => {
+			if (!selectedCourse || !selectedDate) {
+				setSelectedHour(null);
+				setSelectedBatch(null);
+				return;
 			}
-		};
-
-		fetchTimetableAndSetDefaults();
-	}, [selectedCourse, selectedDate]);
-
-	useEffect(() => {
-		const fetchAvailableHours = async () => {
-			if (!selectedCourse || !selectedDate) return;
-
-			// Reset dependent selections
-			setAvailableHours([]);
-			setSelectedHour(null);
 
 			try {
 				const token = localStorage.getItem('token');
-				const response = await fetch(`${backendUrl}/api/schedules/${selectedCourse._id}`, {
+				const response = await fetch(`${backendUrl}/schedules/${selectedCourse._id}`, {
 					headers: { Authorization: `Bearer ${token}` },
 				});
-				if (!response.ok) throw new Error('Could not fetch schedule.');
+
+				if (!response.ok) {
+					setSelectedHour(null);
+					setSelectedBatch(null);
+					return;
+				}
 
 				const allSlots = await response.json();
 				const dayOfWeek = getDayOfWeek(selectedDate);
+				const firstRelevantSlot = allSlots.find(slot => slot.day === dayOfWeek);
 
-				// Filter slots for the selected day and batch (if applicable)
-				const relevantSlots = allSlots.filter(slot => {
-					if (slot.day !== dayOfWeek) return false;
+				if (firstRelevantSlot) {
+					setSelectedHour(firstRelevantSlot.hour);
 					if (selectedCourse.isLab) {
-						return slot.batch == selectedBatch; // Loose comparison for flexibility
+						setSelectedBatch(firstRelevantSlot.batch);
+					} else {
+						setSelectedBatch(null);
 					}
-					return true; // For theory classes, batch doesn't matter
-				});
-
-				const hours = relevantSlots.map(slot => slot.hour).sort((a, b) => a - b);
-				setAvailableHours(hours);
-
-				// Auto-select the first available hour
-				if (hours.length > 0) {
-					setSelectedHour(hours[0]);
+				} else {
+					setSelectedHour(null);
+					setSelectedBatch(null);
 				}
-
 			} catch (error) {
-				console.error(error.message);
+				console.error("Failed to auto-select slot:", error.message);
+				setSelectedHour(null);
+				setSelectedBatch(null);
 			}
 		};
 
-		fetchAvailableHours();
-	}, [selectedCourse, selectedDate, selectedBatch]);
+		autoSelectSlot();
+	}, [selectedCourse, selectedDate]);
+
 
 	const handleFetchStudents = async () => {
-		// Validation checks
 		if (!selectedCourse || !selectedDate || !selectedHour) {
 			message.warning('Please select a course, date, and hour.');
 			return;
 		}
-		// --- FIX: Data-driven check for lab course batch selection ---
 		if (selectedCourse.isLab && !selectedBatch) {
 			message.warning('Please select a batch for this lab course.');
 			return;
@@ -129,8 +90,6 @@ const Attendance = () => {
 				date: selectedDate.format('YYYY-MM-DD'),
 				hr: [selectedHour],
 			};
-
-			// --- FIX: Data-driven logic to add batch to payload ---
 			if (selectedCourse.isLab) {
 				payload.batch = selectedBatch;
 			}
@@ -189,9 +148,9 @@ const Attendance = () => {
 						/>
 					</Col>
 
-					{/* --- FIX: Conditionally render Batch Selector based on data --- */}
 					{selectedCourse && selectedCourse.isLab && (
 						<Col xs={24} md={8} lg={3}>
+							<label className="block text-sm font-medium text-gray-700 mb-1">Select Batch</label>
 							<Select
 								className="w-full"
 								placeholder="Batch"
@@ -203,19 +162,13 @@ const Attendance = () => {
 					)}
 
 					<Col xs={24} md={8} lg={3}>
+						<label className="block text-sm font-medium text-gray-700 mb-1">Select Hour</label>
 						<Select
 							className="w-full"
 							placeholder="Hour"
 							value={selectedHour}
 							onChange={(value) => setSelectedHour(value)}
-							// --- Options are now dynamically generated ---
-							options={availableHours.map(hour => ({
-								value: hour,
-								label: `Hour ${hour}`,
-							}))}
-							notFoundContent={
-								<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No scheduled hours" />
-							}
+							options={hourOptions}
 						/>
 					</Col>
 					<Col xs={24} md={8} lg={5}>
@@ -231,7 +184,6 @@ const Attendance = () => {
 				</Row>
 			</div>
 
-			{/* The rest of your JSX for displaying the table remains the same */}
 			{isLoading ? (
 				<div className="text-center p-10"><Spin size="large" /></div>
 			) : students.length > 0 && attendanceData ? (

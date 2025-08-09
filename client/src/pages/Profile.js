@@ -5,6 +5,7 @@ import {
 	Col,
 	List,
 	Typography,
+	Table,
 	Spin,
 	Divider,
 	Button,
@@ -24,11 +25,118 @@ import { url as backendUrl } from '../Backendurl';
 const { Title, Text } = Typography;
 const { Panel } = Collapse;
 
+const getCourseAcronym = (courseName) => {
+	if (!courseName || typeof courseName !== 'string') return '';
+
+	const words = courseName.trim().split(/\s+/);
+
+	if (words.length > 1) {
+		// For multi-word names, take the first letter of each word (e.g., "Software Engineering Methodologies" -> "SEM")
+		return words.map(word => word[0]).join('').toUpperCase();
+	} else if (words[0].length > 0) {
+		// For single-word names, take the first 3 letters (e.g., "English" -> "Eng")
+		const singleWord = words[0];
+		return singleWord.charAt(0).toUpperCase() + singleWord.slice(1, 3);
+	}
+	return '';
+};
+
+const processScheduleForTimetable = (scheduleSlots) => {
+	const timetableData = {};
+	const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+
+	days.forEach(day => {
+		timetableData[day] = {};
+		for (let i = 1; i <= 8; i++) {
+			timetableData[day][`hour${i}`] = [];
+		}
+	});
+
+	scheduleSlots.forEach(slot => {
+		const key = `hour${slot.hour}`;
+		if (timetableData[slot.day] && timetableData[slot.day][key]) {
+			// Use the new getCourseAcronym function here
+			const acronym = getCourseAcronym(slot.course.coursename);
+			const entry = `${acronym}${slot.batch ? ` (B${slot.batch})` : ''}`;
+			timetableData[slot.day][key].push(entry);
+		}
+	});
+
+	return days.map(day => ({
+		key: day,
+		day: day.charAt(0).toUpperCase() + day.slice(1),
+		...Object.fromEntries(Object.entries(timetableData[day]).map(([hour, courses]) => [hour, courses.join(' / ')]))
+	}));
+};
+
 const Profile = () => {
 	const { user, logout } = useContext(authContext);
+	const [timetable, setTimetable] = useState([]);
+
 	const [dashboardData, setDashboardData] = useState([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const navigate = useNavigate();
+	useEffect(() => {
+		const fetchFullTimetable = async () => {
+			setIsLoading(true);
+			try {
+				const token = localStorage.getItem('token');
+				const urlToFetch = `${backendUrl}/faculty/timetable`;
+
+				// --- DEBUG: Log the URL we are about to fetch ---
+				console.log('Attempting to fetch data from URL:', urlToFetch);
+
+				const response = await fetch(urlToFetch, {
+					headers: { Authorization: `Bearer ${token}` },
+				});
+
+				// --- DEBUG: Log the response status ---
+				console.log('Received response with status:', response.status);
+
+				if (!response.ok) throw new Error('Failed to fetch timetable.');
+
+				const data = await response.json();
+				console.log('Data received successfully:', data);
+
+				const processedData = processScheduleForTimetable(data);
+				setTimetable(processedData);
+			} catch (error) {
+				// --- DEBUG: Log any error that occurs during the fetch ---
+				console.error('An error occurred in fetchFullTimetable:', error);
+				message.error(error.message);
+			} finally {
+				setIsLoading(false);
+			}
+		};
+
+		// --- DEBUG: Check if the useEffect hook is running ---
+		console.log('Profile page useEffect is running. User object:', user);
+
+		if (user) {
+			fetchFullTimetable();
+			document.title = `${user?.username || 'Faculty'} | Profile`;
+		}
+	}, [user]);
+
+	// --- NEW TABLE COLUMN DEFINITIONS ---
+	const columns = [
+		{
+			title: 'Day / Period',
+			dataIndex: 'day',
+			key: 'day',
+			fixed: 'left',
+			width: 120,
+			render: (text) => <Text strong>{text}</Text>
+		},
+		...Array.from({ length: 8 }, (_, i) => ({
+			title: `Hour ${i + 1}`,
+			dataIndex: `hour${i + 1}`,
+			key: `hour${i + 1}`,
+			align: 'center',
+			width: 110,
+		})),
+	];
+
 
 	const fetchDashboardData = useCallback(async () => {
 		setIsLoading(true);
@@ -104,6 +212,18 @@ const Profile = () => {
 						<Text type="secondary">Faculty Dashboard</Text>
 					</Col>
 				</Row>
+			</Card>
+			<Title level={3} className="mb-6">My Weekly Timetable</Title>
+
+			<Card className="shadow-lg">
+				<Table
+					columns={columns}
+					dataSource={timetable}
+					bordered
+					pagination={false}
+					scroll={{ x: 'max-content' }}
+					locale={{ emptyText: <Empty description="Your schedule is empty. Add slots on the 'Time Table' page." /> }}
+				/>
 			</Card>
 
 			<Title level={3} className="mb-6">My Courses</Title>

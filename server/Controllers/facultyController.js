@@ -7,6 +7,8 @@ const Course = require('../Models/courseModel');
 const Student = require('../Models/studentModel');
 const Report = require('../Models/reportModel');
 const Timetable = require('../Models/timetableModel');
+const Schedule = require('../Models/scheduleModel');
+
 
 const normalizeHeader = (header) => {
     const normalized = header.replace(/\s+/g, '').toLowerCase();
@@ -161,10 +163,28 @@ const deleteCourse = asyncHandler(async (req, res) => {
         res.status(404);
         throw new Error('Course not found');
     }
+    await Schedule.deleteMany({ course: course._id });
     await Report.deleteMany({ course: course._id });
-    await Timetable.deleteOne({ course: course._id });
+    await Report.deleteMany({ course: course._id });
+    await Course.deleteOne({ _id: course._id });
     await Course.deleteOne({ _id: course._id });
     res.status(200).json({ message: 'Course and all associated data deleted successfully.' });
 });
+const getFacultyTimetable = asyncHandler(async (req, res) => {
+    const facultyId = req.user.id;
 
-module.exports = { getFacultyDashboard, createCourseWithStudents, getCourseStudents, deleteCourse };
+    // 1. Find all courses assigned to the faculty
+    const courses = await Course.find({ faculty: facultyId }).select('_id');
+    if (!courses || courses.length === 0) {
+        return res.status(200).json([]); // Return empty if no courses are assigned
+    }
+    const courseIds = courses.map(c => c._id);
+
+    // 2. Find all schedule slots for those courses and populate the course details
+    const scheduleSlots = await Schedule.find({ course: { $in: courseIds } })
+        .populate('course', 'coursecode coursename') // Now includes coursename
+        .sort({ day: 1, hour: 1 });
+
+    res.status(200).json(scheduleSlots);
+});
+module.exports = { getFacultyDashboard, createCourseWithStudents, getCourseStudents, deleteCourse, getFacultyTimetable };

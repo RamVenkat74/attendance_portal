@@ -15,6 +15,8 @@ import {
 } from 'antd';
 import { FileExcelOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import Papa from 'papaparse';
+
 import { url as backendUrl } from '../Backendurl';
 
 const { RangePicker } = DatePicker;
@@ -134,9 +136,62 @@ const Students = () => {
     };
 
     const exportToCSV = () => {
-        message.info('CSV Export functionality needs to be adapted to the new data structure.');
-    };
+        if (reportData.length === 0) {
+            message.error('No data to export.');
+            return;
+        }
 
+        // Dynamically create the headers from the table columns
+        const headers = columns.map(col => col.title);
+
+        // Convert the report data into a simple array of arrays for the CSV
+        const data = reportData.map(student => {
+            return columns.map(col => {
+                // Handle different data keys
+                switch (col.key) {
+                    case 'RegNo':
+                        return student.RegNo;
+                    case 'name':
+                        return student.name;
+                    case 'total':
+                        return student.courses[0]?.totalHours || 0;
+                    case 'present':
+                        return student.courses[0]?.present || 0;
+                    case 'percentage':
+                        const course = student.courses[0];
+                        if (!course || !course.totalHours) return 'N/A';
+                        return Math.round((course.present * 100) / course.totalHours) + '%';
+                    default:
+                        // This handles all the dynamic date/hour columns
+                        if (col.key.startsWith('status-')) {
+                            const index = parseInt(col.key.split('-')[1], 10);
+                            const statusValue = student.courses[0]?.statuses[index]?.status;
+                            if (statusValue === 1) return 'P';
+                            if (statusValue === 2) return 'OD';
+                            if (statusValue === -1) return 'A';
+                            return ''; // No record for this slot
+                        }
+                        return '';
+                }
+            });
+        });
+
+        // Use papaparse to convert our data array to a CSV string
+        const csv = Papa.unparse({
+            fields: headers,
+            data: data,
+        });
+
+        // Create a blob and trigger a download
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'class_attendance_report.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
     const filteredData = reportData.filter(
         student =>
             (student.name && student.name.toLowerCase().includes(searchText.toLowerCase())) ||

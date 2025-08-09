@@ -80,7 +80,7 @@ const Sidebar = () => {
 				{
 					key: "time-table",
 					icon: <TableOutlined />,
-					label: "Time Table",
+					label: "Manage Schedules",
 				},
 			]
 			: []),

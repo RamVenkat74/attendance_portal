@@ -11,6 +11,8 @@ const upload = multer({ dest: 'uploads/' });
 router.use(protect);
 
 router.get('/dashboard', facultyController.getFacultyDashboard);
+router.get('/timetable', facultyController.getFacultyTimetable);
+
 
 // --- MODIFIED ROUTE for file uploads ---
 router.route('/courses')
