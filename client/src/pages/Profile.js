@@ -3,14 +3,12 @@ import {
 	Card,
 	Row,
 	Col,
-	List,
 	Typography,
 	Table,
 	Spin,
 	Divider,
 	Button,
 	message,
-	Collapse,
 	Avatar,
 	Statistic,
 	Popconfirm,
@@ -23,7 +21,6 @@ import { authContext } from '../context/authContext';
 import { url as backendUrl } from '../Backendurl';
 
 const { Title, Text } = Typography;
-const { Panel } = Collapse;
 
 const getCourseAcronym = (courseName) => {
 	if (!courseName || typeof courseName !== 'string') return '';
@@ -189,24 +186,6 @@ const Profile = () => {
 		}
 	};
 
-	const handleRemoveRep = async (repId, courseId) => {
-		try {
-			const token = localStorage.getItem('token');
-			const response = await fetch(`${backendUrl}/faculty/courses/${courseId}/representatives/${repId}`, {
-				method: 'DELETE',
-				headers: { Authorization: `Bearer ${token}` },
-			});
-			if (!response.ok) {
-				const errorData = await response.json();
-				throw new Error(errorData.message);
-			}
-			message.success('Representative removed successfully.');
-			fetchDashboardData(); // This should be the function that refreshes your profile data
-		} catch (error) {
-			message.error(error.message);
-		}
-	};
-
 
 	if (isLoading) {
 		return <div className="text-center mt-20"><Spin size="large" /></div>;
@@ -271,33 +250,7 @@ const Profile = () => {
 									</Col>
 								</Row>
 								<Divider />
-								<Collapse ghost>
-									<Panel header={`Representatives (${course.representatives.length})`} key="1">
-										<List
-											dataSource={course.representatives}
-											renderItem={(rep) => (
-												<List.Item
-													// --- UPDATE THE ACTIONS for the list item ---
-													actions={[
-														<Popconfirm
-															title="Remove Representative"
-															description="Are you sure you want to un-assign this representative from this course?"
-															onConfirm={() => handleRemoveRep(rep._id, course._id)}
-															okText="Yes, Remove"
-															cancelText="No"
-														>
-															<Button type="link" danger>
-																Remove
-															</Button>
-														</Popconfirm>
-													]}
-												>
-													{rep.username}
-												</List.Item>
-											)}
-										/>
-									</Panel>
-								</Collapse>
+
 							</Card>
 						</Col>
 					))}
